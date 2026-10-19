@@ -1,4 +1,4 @@
-# EF101-P11 Hardware Asset Inventory
+# EF101-P11: Computer Hardware Inventory and Maintenance System
 
 Flask + SQLite web app that tracks computer assets (specs, location, warranty, status) and their maintenance/fault history, with a dashboard and CSV export. All data in `inventory.db` is **DEMO data**, not real assets.
 
