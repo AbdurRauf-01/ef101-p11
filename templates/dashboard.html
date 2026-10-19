@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="grid g4">
+  <div class="card stat"><div class="n">{{ stats.total }}</div><div class="l">Total active assets</div></div>
+  <div class="card stat"><div class="n" style="color:var(--ok)">{{ stats.operational }}</div><div class="l">Operational</div></div>
+  <div class="card stat"><div class="n" style="color:var(--bad)">{{ stats.faulty }}</div><div class="l">Faulty ({{ stats.repair }} more under repair)</div></div>
+  <div class="card stat"><div class="n">{{ stats.out_of_warranty }}</div><div class="l">Out of warranty</div></div>
+  <div class="card stat"><div class="n" style="color:var(--warn)">{{ stats.attention }}</div><div class="l">Needing attention</div></div>
+  <div class="card stat"><div class="n">{{ stats.retired }}</div><div class="l">Retired (not counted above)</div></div>
+  <div class="card stat"><div class="n">{{ '%.0f'|format(stats.total_cost) }}</div><div class="l">Total maintenance cost</div></div>
+</div>
+
+<p class="muted">"Needing attention" rule: status is Faulty or Under Repair, <b>or</b> {{ rule_count }}+ maintenance events,
+<b>or</b> warranty expires within {{ rule_days }} days.</p>
+
+<h2>Hardware distribution</h2>
+<div class="grid g2">
+{% for title, rows in charts.items() %}
+<div class="card"><h2>{{ title }}</h2>
+{% for label, n, w in rows %}
+  <div class="bar"><span class="lab" title="{{ label }}">{{ label }}</span>
+  <span class="track"><span class="fill" style="width:{{ w }}%;display:block"></span></span>
+  <span class="val">{{ n }}</span></div>
+{% endfor %}</div>
+{% endfor %}
+</div>
+
+<h2>Failure analysis</h2>
+<div class="grid g2">
+<div class="card"><h2>Fault events by category</h2>
+{% for label, n, w in fault_cats %}
+  <div class="bar"><span class="lab">{{ label }}</span>
+  <span class="track"><span class="fill" style="width:{{ w }}%;background:var(--bad);display:block"></span></span>
+  <span class="val">{{ n }}</span></div>
+{% endfor %}
+{% if fault_cats %}<p><b>Most common fault category:</b> {{ fault_cats[0][0] }} ({{ fault_cats[0][1] }} events)</p>{% endif %}</div>
+<div class="card"><h2>Most frequently failing assets</h2>
+<table><tr><th>Asset</th><th>Model</th><th>Events</th><th class="right">Cost</th></tr>
+{% for r in top_assets %}
+<tr><td><a href="{{ url_for('asset_detail', asset_id=r.asset_id) }}">{{ r.asset_id }}</a></td>
+<td>{{ r.model }}</td><td>{{ r.n }}</td><td class="right">{{ '%.0f'|format(r.cost) }}</td></tr>
+{% endfor %}</table>
+{% if top_assets %}<p><b>Most failing asset:</b> {{ top_assets[0].asset_id }} ({{ top_assets[0].n }} events)</p>{% endif %}</div>
+</div>
+
+<div class="card scroll"><h2>Assets needing attention ({{ attention|length }})</h2>
+<table><tr><th>Asset</th><th>Model</th><th>Location</th><th>Status</th><th>Warranty expiry</th><th>Fault events</th></tr>
+{% for r in attention %}
+<tr><td><a href="{{ url_for('asset_detail', asset_id=r.asset_id) }}">{{ r.asset_id }}</a></td>
+<td>{{ r.model }}</td><td>{{ r.location }}</td>
+<td><span class="badge b-{{ r.status }}">{{ r.status }}</span></td>
+<td>{{ r.warranty_expiry }}</td><td>{{ r.fault_count }}</td></tr>
+{% endfor %}</table></div>
+{% endblock %}

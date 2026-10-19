@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Assets{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between"><h1>Assets ({{ assets|length }})</h1>
+<a class="btn" href="{{ url_for('asset_new') }}">+ Add asset</a></div>
+
+<div class="card">
+<form class="filters" method="get">
+  <div><label>Search (ID, model, CPU, IP)</label><input name="q" value="{{ f.get('q','') }}"></div>
+  <div><label>CPU family</label><select name="cpu_family"><option value="">All</option>
+    {% for o in opts.cpu_family %}<option {{ 'selected' if f.get('cpu_family')==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>RAM (GB)</label><select name="ram_gb"><option value="">All</option>
+    {% for o in opts.ram_gb %}<option value="{{ o }}" {{ 'selected' if f.get('ram_gb')==o|string }}>{{ o }} GB</option>{% endfor %}</select></div>
+  <div><label>Storage type</label><select name="storage_type"><option value="">All</option>
+    {% for o in storage_types %}<option {{ 'selected' if f.get('storage_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Location</label><select name="location"><option value="">All</option>
+    {% for o in opts.location %}<option {{ 'selected' if f.get('location')==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Status</label><select name="status"><option value="">All</option>
+    {% for o in statuses %}<option {{ 'selected' if f.get('status')==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Warranty</label><select name="warranty"><option value="">All</option>
+    <option {{ 'selected' if f.get('warranty')=='Active' }}>Active</option>
+    <option {{ 'selected' if f.get('warranty')=='Expired' }}>Expired</option></select></div>
+  <div><label>Show</label><select name="show">
+    <option value="">Active only</option>
+    <option value="retired" {{ 'selected' if f.get('show')=='retired' }}>Retired only</option>
+    <option value="all" {{ 'selected' if f.get('show')=='all' }}>All</option></select></div>
+  <div class="row"><button class="btn" type="submit">Apply</button>
+    <a class="btn sec" href="{{ url_for('assets') }}">Reset</a>
+    <a class="btn sec" href="{{ url_for('export_assets', **f) }}">Export CSV</a></div>
+</form>
+</div>
+
+<div class="card scroll">
+<table>
+<tr><th>Asset ID</th><th>Model</th><th>CPU</th><th>RAM</th><th>Storage</th><th>GPU</th><th>Location</th><th>Status</th><th>Warranty</th><th>Faults</th></tr>
+{% for a in assets %}
+<tr>
+  <td><a href="{{ url_for('asset_detail', asset_id=a.asset_id) }}">{{ a.asset_id }}</a>
+      {% if not a.active %}<span class="badge b-Retired">Retired</span>{% endif %}</td>
+  <td>{{ a.manufacturer }} {{ a.model }}</td>
+  <td>{{ a.cpu }}</td>
+  <td>{{ a.ram_gb }} GB</td>
+  <td>{{ a.storage_type }} {{ a.storage_gb }} GB</td>
+  <td>{{ a.gpu or 'Integrated' }}</td>
+  <td>{{ a.location }}</td>
+  <td><span class="badge b-{{ a.status }}">{{ a.status }}</span></td>
+  <td><span class="badge b-{{ a.warranty }}">{{ a.warranty }}</span></td>
+  <td>{{ a.fault_count }}</td>
+</tr>
+{% else %}
+<tr><td colspan="10" class="muted">No assets match these filters.</td></tr>
+{% endfor %}
+</table>
+</div>
+{% endblock %}

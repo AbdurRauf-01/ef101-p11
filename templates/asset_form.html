@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Add' if new else 'Edit' }} asset{% endblock %}
+{% block content %}
+<h1>{{ 'Add asset' if new else 'Edit ' ~ a.asset_id }}</h1>
+<div class="card">
+<form method="post" novalidate>
+<div class="formgrid">
+  <div><label>Asset ID *</label>
+    <input name="asset_id" value="{{ a.get('asset_id','') }}" {{ '' if new else 'readonly' }} placeholder="e.g. L1-PC-041"></div>
+  <div><label>Manufacturer *</label><input name="manufacturer" value="{{ a.get('manufacturer','') }}"></div>
+  <div><label>Model *</label><input name="model" value="{{ a.get('model','') }}"></div>
+  <div><label>CPU (full model) *</label><input name="cpu" value="{{ a.get('cpu','') }}" placeholder="Intel Core i5-12400"></div>
+  <div><label>CPU family *</label><input name="cpu_family" value="{{ a.get('cpu_family','') }}" placeholder="Core i5"></div>
+  <div><label>RAM (GB) *</label><input name="ram_gb" value="{{ a.get('ram_gb','') }}"></div>
+  <div><label>Storage type *</label><select name="storage_type">
+    {% for o in storage_types %}<option {{ 'selected' if a.get('storage_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Storage capacity (GB) *</label><input name="storage_gb" value="{{ a.get('storage_gb','') }}"></div>
+  <div><label>GPU (blank = integrated)</label><input name="gpu" value="{{ a.get('gpu','') or '' }}"></div>
+  <div><label>Operating system *</label><input name="os" value="{{ a.get('os','') }}"></div>
+  <div><label>IP address</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="192.168.1.20"></div>
+  <div><label>Location *</label><input name="location" value="{{ a.get('location','') }}"></div>
+  <div><label>Purchase date * (YYYY-MM-DD)</label><input type="date" name="purchase_date" value="{{ a.get('purchase_date','') }}"></div>
+  <div><label>Warranty expiry * (YYYY-MM-DD)</label><input type="date" name="warranty_expiry" value="{{ a.get('warranty_expiry','') }}"></div>
+  <div><label>Operational status</label><select name="status">
+    {% for o in statuses %}<option {{ 'selected' if a.get('status')==o }}>{{ o }}</option>{% endfor %}</select></div>
+</div>
+<p class="row" style="margin-top:16px"><button class="btn" type="submit">Save</button>
+<a class="btn sec" href="{{ url_for('assets') }}">Cancel</a></p>
+</form>
+</div>
+{% endblock %}

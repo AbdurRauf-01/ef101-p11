@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880" viewBox="0 0 1400 880" font-family="DejaVu Sans, Arial, sans-serif">
+<defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#14213d"/></marker></defs>
+<rect width="1400" height="880" fill="#fff"/>
+<text x="30" y="44" font-size="26" font-weight="bold" fill="#14213d" text-anchor="start">EF101-P11  Hardware Asset Inventory: project schema</text>
+<text x="30" y="70" font-size="14" font-weight="normal" fill="#64707d" text-anchor="start">Everything runs on one computer. No Internet needed: Bootstrap and Chart.js are served from the static/ folder.</text>
+<rect x="30" y="100" width="270" height="350" rx="8" fill="#fff" stroke="#2457c5" stroke-width="2"/>
+<path d="M30,108 a8,8 0 0 1 8,-8 h254 a8,8 0 0 1 8,8 v28 h-270 z" fill="#2457c5"/>
+<text x="44" y="125" font-size="16" font-weight="bold" fill="#fff" text-anchor="start">1  Browser (the user)</text>
+<text x="46" y="162" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">Pages built from templates/:</text>
+<text x="46" y="182" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">  • Dashboard (totals + charts)</text>
+<text x="46" y="202" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">  • Asset list with search and filters</text>
+<text x="46" y="222" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">  • Add / edit asset form</text>
+<text x="46" y="242" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">  • Asset page + maintenance log</text>
+<text x="46" y="262" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start"></text>
+<text x="46" y="282" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">Static files (static/):</text>
+<text x="46" y="302" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">  Bootstrap CSS, Chart.js,</text>
+<text x="46" y="322" font-size="13" font-weight="normal" fill="#1d2733" text-anchor="start">  style.css (all offline)</text>
+<rect x="390" y="100" width="520" height="350" rx="8" fill="#fff" stroke="#2457c5" stroke-width="2"/>
+<path d="M390,108 a8,8 0 0 1 8,-8 h504 a8,8 0 0 1 8,8 v28 h-520 z" fill="#2457c5"/>
+<text x="404" y="125" font-size="16" font-weight="bold" fill="#fff" text-anchor="start">2  Flask app  (app.py + db.py)</text>
+<rect x="404" y="148" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<rect x="404" y="148" width="5" height="72" rx="2" fill="#1a7f4b"/>
+<text x="418" y="170" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Routes</text>
+<text x="418" y="188" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">@app.route: one function per</text>
+<text x="418" y="203" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">page/action</text>
+<rect x="656" y="148" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<rect x="656" y="148" width="5" height="72" rx="2" fill="#1a7f4b"/>
+<text x="670" y="170" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Validation</text>
+<text x="670" y="188" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">validate_asset(): rejects bad</text>
+<text x="670" y="203" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">input</text>
+<rect x="404" y="232" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<rect x="404" y="232" width="5" height="72" rx="2" fill="#1a7f4b"/>
+<text x="418" y="254" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Filters</text>
+<text x="418" y="272" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">filtered_assets(): WHERE built</text>
+<text x="418" y="287" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">with ? values</text>
+<rect x="656" y="232" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<rect x="656" y="232" width="5" height="72" rx="2" fill="#1a7f4b"/>
+<text x="670" y="254" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Needs-attention rule</text>
+<text x="670" y="272" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">attention_sql(): faulty, 3+</text>
+<text x="670" y="287" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">faults, warranty &lt; 30 days</text>
+<rect x="404" y="316" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<rect x="404" y="316" width="5" height="72" rx="2" fill="#1a7f4b"/>
+<text x="418" y="338" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Dashboard queries</text>
+<text x="418" y="356" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">COUNT / GROUP BY: totals,</text>
+<text x="418" y="371" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">charts, most failing</text>
+<rect x="656" y="316" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<rect x="656" y="316" width="5" height="72" rx="2" fill="#1a7f4b"/>
+<text x="670" y="338" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">CSV export</text>
+<text x="670" y="356" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">csv_response(): assets.csv,</text>
+<text x="670" y="371" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">maintenance.csv</text>
+<text x="404" y="422" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">db.py: get_db() opens inventory.db with foreign keys ON; init_db() runs schema.sql</text>
+<rect x="1000" y="100" width="370" height="350" rx="8" fill="#fff" stroke="#14213d" stroke-width="2"/>
+<path d="M1000,108 a8,8 0 0 1 8,-8 h354 a8,8 0 0 1 8,8 v28 h-370 z" fill="#14213d"/>
+<text x="1014" y="125" font-size="16" font-weight="bold" fill="#fff" text-anchor="start">3  SQLite database  (inventory.db)</text>
+<rect x="1014" y="148" width="342" height="138" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<text x="1028" y="170" font-size="14" font-weight="bold" fill="#1d2733" text-anchor="start">assets</text>
+<text x="1028" y="192" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">asset_id (PK) · manufacturer · model</text>
+<text x="1028" y="209" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">cpu · cpu_family · ram_gb</text>
+<text x="1028" y="226" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">storage_type · storage_gb · gpu · os</text>
+<text x="1028" y="243" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">ip_address · location</text>
+<text x="1028" y="260" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">purchase_date · warranty_expiry</text>
+<text x="1028" y="277" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">status · active (0 = retired, kept)</text>
+<line x1="1185" y1="286" x2="1185" y2="320" stroke="#14213d" stroke-width="2"/>
+<text x="1195" y="300" font-size="11.5" font-weight="bold" fill="#14213d" text-anchor="start">1 asset : N events</text>
+<rect x="1014" y="322" width="342" height="112" rx="6" fill="#f4f6f9" stroke="#c9d1db"/>
+<text x="1028" y="344" font-size="14" font-weight="bold" fill="#1d2733" text-anchor="start">maintenance</text>
+<text x="1028" y="366" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">id (PK) · asset_id (FK → assets)</text>
+<text x="1028" y="383" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">event_date · fault_category</text>
+<text x="1028" y="400" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">fault_description · action_taken</text>
+<text x="1028" y="417" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">technician · cost</text>
+<line x1="300" y1="230" x2="390" y2="230" stroke="#14213d" stroke-width="2.2" marker-end="url(#a)"/>
+<text x="345" y="220" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="middle">request</text>
+<line x1="390" y1="330" x2="300" y2="330" stroke="#14213d" stroke-width="2.2" marker-end="url(#a)"/>
+<text x="345" y="322" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="middle">HTML / CSV</text>
+<line x1="910" y1="230" x2="1000" y2="230" stroke="#14213d" stroke-width="2.2" marker-end="url(#a)"/>
+<text x="955" y="220" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="middle">SQL (?)</text>
+<line x1="1000" y1="330" x2="910" y2="330" stroke="#14213d" stroke-width="2.2" marker-end="url(#a)"/>
+<text x="955" y="322" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="middle">rows</text>
+<rect x="30" y="490" width="640" height="360" rx="8" fill="#fff" stroke="#1a7f4b" stroke-width="2"/>
+<path d="M30,498 a8,8 0 0 1 8,-8 h624 a8,8 0 0 1 8,8 v28 h-640 z" fill="#1a7f4b"/>
+<text x="44" y="515" font-size="16" font-weight="bold" fill="#fff" text-anchor="start">What happens when you press Save</text>
+<circle cx="56" cy="551" r="13" fill="#1a7f4b"/>
+<text x="56" y="556" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">1</text>
+<text x="80" y="556" font-size="13.5" font-weight="normal" fill="#1d2733" text-anchor="start">Browser sends the form (POST /assets/new)</text>
+<circle cx="56" cy="597" r="13" fill="#1a7f4b"/>
+<text x="56" y="602" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">2</text>
+<text x="80" y="602" font-size="13.5" font-weight="normal" fill="#1d2733" text-anchor="start">validate_asset() checks every field</text>
+<circle cx="56" cy="643" r="13" fill="#1a7f4b"/>
+<text x="56" y="648" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">3</text>
+<text x="80" y="648" font-size="13.5" font-weight="normal" fill="#1d2733" text-anchor="start">Errors: the form is shown again with messages, nothing is saved</text>
+<circle cx="56" cy="689" r="13" fill="#1a7f4b"/>
+<text x="56" y="694" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">4</text>
+<text x="80" y="694" font-size="13.5" font-weight="normal" fill="#1d2733" text-anchor="start">OK: a parameterised INSERT writes the row, then commit()</text>
+<circle cx="56" cy="735" r="13" fill="#1a7f4b"/>
+<text x="56" y="740" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">5</text>
+<text x="80" y="740" font-size="13.5" font-weight="normal" fill="#1d2733" text-anchor="start">Redirect to the asset page: a SELECT shows the new record</text>
+<circle cx="56" cy="781" r="13" fill="#1a7f4b"/>
+<text x="56" y="786" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">6</text>
+<text x="80" y="786" font-size="13.5" font-weight="normal" fill="#1d2733" text-anchor="start">Dashboard and CSV export read the same tables</text>
+<text x="46" y="836" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">Retiring an asset sets active = 0: it disappears from lists but its history stays.</text>
+<rect x="710" y="490" width="660" height="360" rx="8" fill="#fff" stroke="#14213d" stroke-width="2"/>
+<path d="M710,498 a8,8 0 0 1 8,-8 h644 a8,8 0 0 1 8,8 v28 h-660 z" fill="#14213d"/>
+<text x="724" y="515" font-size="16" font-weight="bold" fill="#fff" text-anchor="start">Project files and what each one does</text>
+<rect x="724" y="530" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="548" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">app.py</text>
+<text x="850" y="548" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">routes, validation, filters, dashboard queries, CSV export</text>
+<rect x="724" y="564" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="582" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">db.py</text>
+<text x="850" y="582" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">opens SQLite, creates tables from schema.sql</text>
+<rect x="724" y="598" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="616" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">schema.sql</text>
+<text x="850" y="616" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">CREATE TABLE for assets and maintenance</text>
+<rect x="724" y="632" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="650" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">seed.py</text>
+<text x="850" y="650" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">makes 40 demo assets + 43 events (fixed random seed)</text>
+<rect x="724" y="666" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="684" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">templates/</text>
+<text x="850" y="684" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">HTML pages (Jinja) for each screen</text>
+<rect x="724" y="700" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="718" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">static/</text>
+<text x="850" y="718" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">CSS, Bootstrap, Chart.js, all offline</text>
+<rect x="724" y="734" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="752" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">test_app.py</text>
+<text x="850" y="752" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">34 automated checks on a temporary database</text>
+<rect x="724" y="768" width="632" height="28" rx="4" fill="#f4f6f9"/>
+<text x="738" y="786" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">README.md</text>
+<text x="850" y="786" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">how to run, rules, tool and AI disclosure</text>
+<text x="724" y="836" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">Outputs: dashboard (totals, charts, most failing asset) and CSV downloads that open in Excel.</text>
+</svg>

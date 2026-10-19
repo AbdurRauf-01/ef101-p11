@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ a.asset_id }}{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>{{ a.asset_id }}
+    {% if not a.active %}<span class="badge b-Retired">Retired</span>{% endif %}</h1>
+  <div class="row">
+    <a class="btn sec" href="{{ url_for('asset_edit', asset_id=a.asset_id) }}">Edit</a>
+    {% if a.active %}
+    <form method="post" action="{{ url_for('asset_retire', asset_id=a.asset_id) }}"
+          onsubmit="return confirm('Retire this asset? Its history is kept.')">
+      <button class="btn danger" type="submit">Retire</button></form>
+    {% else %}
+    <form method="post" action="{{ url_for('asset_reactivate', asset_id=a.asset_id) }}">
+      <button class="btn" type="submit">Reactivate</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+<div class="card"><h2>Hardware &amp; location</h2>
+<dl>
+  <dt>Manufacturer / model</dt><dd>{{ a.manufacturer }} {{ a.model }}</dd>
+  <dt>CPU</dt><dd>{{ a.cpu }} ({{ a.cpu_family }})</dd>
+  <dt>RAM</dt><dd>{{ a.ram_gb }} GB</dd>
+  <dt>Storage</dt><dd>{{ a.storage_type }}, {{ a.storage_gb }} GB</dd>
+  <dt>GPU</dt><dd>{{ a.gpu or 'Integrated only' }}</dd>
+  <dt>Operating system</dt><dd>{{ a.os }}</dd>
+  <dt>IP address</dt><dd>{{ a.ip_address or '-' }}</dd>
+  <dt>Location</dt><dd>{{ a.location }}</dd>
+</dl></div>
+<div class="card"><h2>Status &amp; warranty</h2>
+<dl>
+  <dt>Operational status</dt><dd><span class="badge b-{{ a.status }}">{{ a.status }}</span></dd>
+  <dt>Purchase date</dt><dd>{{ a.purchase_date }}</dd>
+  <dt>Warranty expiry</dt><dd>{{ a.warranty_expiry }} <span class="badge b-{{ warranty }}">{{ warranty }}</span></dd>
+  <dt>Maintenance events</dt><dd>{{ events|length }}</dd>
+  <dt>Total repair cost</dt><dd>{{ '%.2f'|format(total_cost) }}</dd>
+</dl></div>
+</div>
+
+<div class="card scroll"><h2>Maintenance history</h2>
+<table>
+<tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
+{% for e in events %}
+<tr><td>{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description }}</td>
+<td>{{ e.action_taken }}</td><td>{{ e.technician }}</td><td class="right">{{ '%.2f'|format(e.cost) }}</td></tr>
+{% else %}
+<tr><td colspan="6" class="muted">No maintenance events recorded.</td></tr>
+{% endfor %}
+</table></div>
+
+<div class="card"><h2>Log a fault / maintenance event</h2>
+<form method="post" action="{{ url_for('maintenance_add', asset_id=a.asset_id) }}" novalidate>
+<div class="formgrid">
+  <div><label>Date *</label><input type="date" name="event_date" value="{{ today }}"></div>
+  <div><label>Fault category *</label><input name="fault_category" list="cats" placeholder="e.g. Disk failure">
+    <datalist id="cats"><option>Disk failure</option><option>Overheating</option><option>PSU failure</option>
+    <option>RAM fault</option><option>OS corruption</option><option>Network issue</option><option>Display issue</option></datalist></div>
+  <div><label>Fault description *</label><input name="fault_description"></div>
+  <div><label>Action taken *</label><input name="action_taken"></div>
+  <div><label>Technician *</label><input name="technician"></div>
+  <div><label>Cost</label><input name="cost" value="0"></div>
+  <div><label>Update asset status to</label><select name="set_status"><option value="">(no change)</option>
+    <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
+</div>
+<p><button class="btn" type="submit">Log event</button></p>
+</form></div>
+{% endblock %}
