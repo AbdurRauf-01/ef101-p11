@@ -154,23 +154,43 @@ def filter_options():
 
 
 # ---- Assets: write ----------------------------------------------------------
-def _insert_event(db, asset_id, ev):
-    """One maintenance event, written inside the caller's transaction."""
+def _add_step(db, asset_id, step_date, action, technician, cost):
+    """One step of an open fault. Not history: it is combined into the history entry when the fault closes."""
+    db.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician,cost_usd) VALUES (?,?,?,?,?)",
+               (asset_id, step_date, action or "", technician or "", float(cost or 0)))
+
+
+def _close_fault(db, asset_id, ev):
+    """Closing a fault writes ONE history entry. Its Action taken lists every step (date: action) and the
+    final action; its cost is the total of all steps plus the final cost. The steps are then removed.
+    ev = event_date, fault_category, fault_description, action, technician, cost (all validated by the app)."""
+    steps = db.execute("SELECT step_date, action, cost_usd FROM fault_steps WHERE asset_id=? ORDER BY id",
+                       (asset_id,)).fetchall()
+    parts = [f"{s['step_date']}: {s['action']}" for s in steps if s["action"]]
+    final = (ev.get("action") or "").strip()
+    if final and not (steps and steps[-1]["action"] == final):
+        parts.append(f"{ev['event_date']}: {final}")
+    cost = sum(s["cost_usd"] for s in steps) + float(ev.get("cost") or 0)
     db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
                "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
-               (asset_id, ev["event_date"], ev["fault_category"], ev.get("fault_description") or "",
-                ev.get("action_taken") or "", ev.get("technician") or "", ev.get("cost", 0)))
+               (asset_id, ev["event_date"], ev["fault_category"], ev["fault_description"],
+                "; ".join(parts) or final, ev["technician"], cost))
+    db.execute("DELETE FROM fault_steps WHERE asset_id=?", (asset_id,))
 
 
-def insert_asset(c, event=None):
-    """c = validated dict with every key in FIELDS. May raise sqlite3.IntegrityError
-    (the transaction is rolled back and the connection closed first)."""
+def get_steps(asset_id):
+    return get_db().execute("SELECT * FROM fault_steps WHERE asset_id=? ORDER BY id", (asset_id,)).fetchall()
+
+
+def insert_asset(c, step=None):
+    """c = validated dict with every key in FIELDS. step = optional first step of a new open fault.
+    May raise sqlite3.IntegrityError (the transaction is rolled back and the connection closed first)."""
     db = get_db()
     try:
         db.execute(f"INSERT INTO assets ({','.join(FIELDS)}, active) VALUES ({','.join('?' * len(FIELDS))}, 1)",
                    [c[k] for k in FIELDS])
-        if event:
-            _insert_event(db, c["asset_id"], event)
+        if step:
+            _add_step(db, c["asset_id"], **step)
         db.commit()
     except Exception:
         db.rollback()
@@ -179,15 +199,19 @@ def insert_asset(c, event=None):
         db.close()
 
 
-def update_asset(asset_id, c, event=None):
-    """The primary key (asset_id) is never changed. event = optional history entry (new fault or fix)."""
+def update_asset(asset_id, c, step=None, close=None):
+    """The primary key (asset_id) is never changed.
+    step  = a step of the open fault (saved as a step, not as history);
+    close = the closing details: the fault is written to history as one entry."""
     db = get_db()
     try:
         sets = ",".join(f"{k}=?" for k in FIELDS if k != "asset_id")
         db.execute(f"UPDATE assets SET {sets} WHERE asset_id=?",
                    [c[k] for k in FIELDS if k != "asset_id"] + [asset_id])
-        if event:
-            _insert_event(db, asset_id, event)
+        if close:
+            _close_fault(db, asset_id, close)
+        if step:
+            _add_step(db, asset_id, **step)
         db.commit()
     except Exception:
         db.rollback()
@@ -215,24 +239,25 @@ def get_events(asset_id):
                             (asset_id,)).fetchall()
 
 
-def add_event(asset_id, f, cost, set_status=None, current=None):
-    """Save one maintenance event. set_status (optional) changes the asset's status in the same commit:
-    - 'Operational' clears the current fault (the fix has been logged);
-    - 'Faulty' / 'Under Repair' stores `current` (the fault: category, detail, action, technician, date)."""
+def log_event(asset_id, f, cost, new_status, current=None):
+    """Log form. Operational = close the fault (one history entry, all steps combined).
+    Faulty / Under Repair = keep the fault open and record a step if there is new work or a cost.
+    f = event_date, fault_category, fault_description, action_taken, technician (validated by the app)."""
     db = get_db()
     try:
-        db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
-                   "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
-                   (asset_id, f["event_date"], f["fault_category"], f["fault_description"],
-                    f["action_taken"], f["technician"], cost))
-        if set_status == "Operational":
+        if new_status == "Operational":
+            _close_fault(db, asset_id, dict(f, action=f["action_taken"], cost=cost))
             db.execute("UPDATE assets SET status='Operational', status_category=NULL, status_detail=NULL, "
                        "status_action=NULL, status_technician=NULL, status_date=NULL WHERE asset_id=?", (asset_id,))
-        elif set_status in CURRENT_ERROR_STATUSES:
+        else:
+            prev = db.execute("SELECT status_action FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
             db.execute("UPDATE assets SET status=?, status_category=?, status_detail=?, status_action=?, "
                        "status_technician=?, status_date=? WHERE asset_id=?",
-                       (set_status, current["category"], current["detail"], current["action"],
+                       (new_status, current["category"], current["detail"], current["action"],
                         current["technician"], current["date"], asset_id))
+            new_work = current["action"] and current["action"] != (prev["status_action"] or "")
+            if new_work or float(cost or 0) > 0:
+                _add_step(db, asset_id, f["event_date"], current["action"], current["technician"], cost)
         db.commit()
     except Exception:
         db.rollback()

@@ -10,7 +10,7 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 pip install flask
 python seed.py        # optional: wipes and recreates inventory.db with demo data
 python app.py         # open http://127.0.0.1:5000
-python test_app.py    # runs 154 checks on a temporary database, prints a results table
+python test_app.py    # runs 162 checks on a temporary database, prints a results table
 ```
 No Internet is needed: the app uses no external libraries (plain CSS in `static/style.css`; dashboard charts are CSS bars).
 
@@ -27,13 +27,14 @@ No Internet is needed: the app uses no external libraries (plain CSS in `static/
 | `templates/`, `static/` | HTML (Jinja) pages and the stylesheet |
 
 ## Upgrading an existing database
-If you already have an `inventory.db` from an earlier version (version 6 or later), run `python migrate.py` once. It copies every row into the current structure, keeps a backup as `inventory.db.bak`, and reports any IP addresses it had to assign.
+If you already have an `inventory.db` from an earlier version (version 8 or later), run `python migrate.py` once. It removes incomplete history entries (a blank or Unknown field), turns valid entries logged while a fault was open into its steps, and lists anything it could not resolve. It copies every row into the current structure, keeps a backup as `inventory.db.bak`, and reports any IP addresses it had to assign.
 
 ## Rules to document in the report
 - **IP addresses**: optional. A blank IP is shown as Not Assigned; nothing is assigned automatically. Two PCs in the same place can never share an IP (a PC's IP is checked against the others in its place); different places may share one.
 - **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately in the dashboard's Fault history, whatever the status.
-- **Current fault**: while an asset is Faulty or Under Repair, its fault (category, description, actions to be taken, technician, date) is shown in its Current fault section. All of these are optional on the Edit/Add form; a blank category is saved as Unknown. Each fault is also a history entry.
-- **Closing a fault**: a Faulty or Under Repair asset is closed by setting it to Operational. On the Edit form, every fault field (category other than Unknown, description, action taken, technician) is required; on the Log form, the same fields are required (cost is optional). The fix is recorded in the history and the Current fault section shows "-".
+- **Current fault**: while a PC is Faulty or Under Repair, its fault (category, description, actions to be taken, technician, date) is shown in its Current fault section. Nothing is written to the history while the fault is open. Under Repair requires a technician. A blank category is saved as Unknown.
+- **Steps of an open fault**: each save with a new action, or with a cost, adds a step (its date, action, technician and cost). The steps are listed under Current fault. Saving the same action again adds nothing.
+- **Closing a fault**: the PC is closed by setting it to Operational. Every fault field (category other than Unknown, description, action taken, technician) and the date are required; the cost is optional. The fault is then written to the history as ONE entry: its Action taken lists every step with its date, and its cost is the total of all steps. A history entry is never written for an open fault. This applies on the Log form and on the Edit form.
 - **Sorting**: the asset list sorts by any column (click a heading; click again to reverse). The Status heading cycles which status comes first: Operational (green), Under Repair (yellow), Faulty (red); the other statuses follow alphabetically. The default is Asset ID, ascending.
 - **Fault categories**: maintenance events use a fixed drop-down (Disk failure, Overheating, Network issue, RAM fault, OS corruption, Display issue, PSU failure, Other, Unknown). The failure chart always shows every category; anything unexpected is counted as Other.
 - **Locations**: a place is chosen from a drop-down, or added with **+ Add new location** (it then appears on the dashboard, even while empty). Each place has a short code (for example Lab 4 = `L4`).

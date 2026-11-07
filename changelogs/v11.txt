@@ -1,0 +1,11 @@
+What changed:
+
+1–2. Invalid history entries. The history was getting entries for open faults, and those are where the “Unknown” and blank fields came from. An entry is now written only when a PC is set back to Operational.
+
+3. Validation and the Edit form.
+- Closing a fault requires every field: a category other than Unknown, a description, the action taken, and a technician. Cost is optional.
+- Under Repair requires a technician on both forms (the Edit form was previously relaxed).
+- The Edit form has Date and Cost fields.
+- Faulty saves nothing to the history.
+
+4. Steps instead of history. While a fault is open, each save that has a new action, or a cost, is kept as a step. The asset page lists the steps under Current fault. Saving the same action again adds nothing. When the PC is set to Operational, one history entry is written. Its Action taken lists every step with its date, and its cost is the total of all the steps.

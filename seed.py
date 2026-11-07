@@ -118,12 +118,11 @@ def main():
         a[14] = "Faulty"
 
     # Current fault: every Faulty / Under Repair asset gets one; Operational assets stay NULL (shown as "-").
-    # Each current fault is also a history entry, the same rule the app follows.
+    # Open faults are not history yet (they become one history entry when the PC is Operational again).
     current = {}
     for n, a in enumerate(x for x in assets if x[14] != "Operational"):
         cat, detail = CURRENT_ERRORS[n % len(CURRENT_ERRORS)]
         current[a[0]] = (cat, detail)
-        events.append([a[0], TODAY.isoformat(), cat, detail, "", "", 0])
     rows = []
     for a in assets:
         cur = current.get(a[0])
@@ -131,7 +130,9 @@ def main():
         ram_type = "DDR4"
         vram = GPU_VRAM.get(a[8]) if a[8] else None
         cat, detail = cur if cur else (None, None)
-        action, tech, when = ("", "", TODAY.isoformat()) if cur else (None, None, None)
+        # an open fault goes into the history only when it is closed; Under Repair always has a technician
+        tech = (TECHS[int(a[0].split("-")[-1]) % len(TECHS)] if a[14] == "Under Repair" else "") if cur else None
+        action, when = ("", TODAY.isoformat()) if cur else (None, None)
         rows.append([a[0], a[1], a[2], a[3], a[4], a[5], ram_type, a[6], a[7], a[8], vram, a[9], a[10],
                      a[11], a[12], a[13], a[14], cat, detail, action, tech, when, a[15]])
     conn.executemany(

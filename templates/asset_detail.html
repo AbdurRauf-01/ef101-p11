@@ -51,7 +51,19 @@
 <td>{{ a.status_detail or 'Not recorded' }}</td><td>{{ a.status_action or 'Not recorded' }}</td>
 <td>{{ a.status_technician or 'Not recorded' }}</td></tr>
 {% endif %}
-</table></div>
+</table>
+{% if a.status != 'Operational' %}
+<h3 style="margin:14px 0 6px;font-size:.95rem">Steps so far <span class="muted">(recorded in the history when the PC is Operational again)</span></h3>
+<table>
+<tr><th>Date</th><th>Action</th><th>Technician</th><th class="right">Cost</th></tr>
+{% for s in steps %}
+<tr><td>{{ s.step_date }}</td><td>{{ s.action or 'Cost only' }}</td><td>{{ s.technician or 'Not recorded' }}</td><td class="right">{{ s.cost_usd|money }}</td></tr>
+{% else %}
+<tr><td colspan="4" class="muted">No steps yet.</td></tr>
+{% endfor %}
+</table>
+{% endif %}
+</div>
 
 <div class="card scroll"><h2>Maintenance history</h2>
 <table>

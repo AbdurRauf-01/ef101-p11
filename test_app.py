@@ -58,7 +58,8 @@ def sums_match_total(d):
 GOOD = dict(asset_id="TEST-001", manufacturer="Dell", model="OptiPlex 7090", cpu="Intel Core i5-12400",
             cpu_family="Core i5", ram_gb="16", ram_type="DDR4", storage_type="SSD", storage_gb="512", gpu="",
             os="Windows 11 Pro", ip_address="", location="Lab 1",
-            purchase_date="2025-01-10", warranty_expiry="2028-01-10", status="Operational")
+            purchase_date="2025-01-10", warranty_expiry="2028-01-10", status="Operational",
+            fault_date="2026-03-10", fault_cost="0")
 
 # 1. Dataset size
 check("Demo data size", "seed.py", ">= 30 assets", count("SELECT COUNT(*) FROM assets") >= 30)
@@ -117,8 +118,10 @@ ev = dict(event_date="2026-01-05", fault_category="Disk failure", fault_descript
           action_taken="Replaced drive", technician="Ali", cost="45.5", set_status="Under Repair",
           status_category="Disk failure", status_detail="Drive clicking, replacement pending")
 client.post("/assets/TEST-001/maintenance", data=ev)
-check("Log maintenance event", "valid event", "row saved",
-      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1)
+check("Under Repair on the Log form opens the fault", "valid event with status Under Repair",
+      "the action is a step; no history row yet",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='TEST-001' AND action='Replaced drive'") == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 0)
 check("Event updates status", "set_status=Under Repair", "asset status changed",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Under Repair'") == 1)
 page = client.get("/assets/TEST-001").get_data(as_text=True)
@@ -127,8 +130,7 @@ client.post("/assets/TEST-001/maintenance", data={**ev, "cost": "-5", "fault_des
 client.post("/assets/TEST-001/maintenance", data={**ev, "event_date": "2999-01-01", "fault_description": "future"})
 client.post("/assets/TEST-001/maintenance", data={**ev, "fault_category": "Gremlins", "fault_description": "bogus"})
 check("Invalid event rejected", "negative cost / future date / unknown category", "nothing saved",
-      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1
-      and count("SELECT COUNT(*) FROM maintenance WHERE fault_description='bogus'") == 0)
+      count("SELECT COUNT(*) FROM maintenance WHERE fault_description IN ('neg','future','bogus')") == 0)
 
 # 6b. Fault rules on the Log form and the Edit form
 client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Under Repair", "technician": "",
@@ -166,7 +168,7 @@ check("Edit form closes the fault", "status Operational with all fields", "statu
             "AND status_detail IS NULL AND status_action IS NULL AND status_technician IS NULL AND status_date IS NULL") == 1)
 check("The fix is in the history", "the closing edit", "one history row with the fix details",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001' AND fault_description='Hot CPU' "
-            "AND action_taken='Clean fans' AND technician='Sara'") == 1)
+            "AND action_taken LIKE '%Clean fans%' AND technician='Sara'") == 1)
 detail = client.get("/assets/TEST-001").get_data(as_text=True)
 check("Current fault shows dashes when Operational", "GET /assets/TEST-001", "a row of '-' in every column",
       "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in detail)
@@ -179,9 +181,8 @@ check("Log form stores the current fault", "set Faulty, category Other", "catego
 
 # 7. Retire (not delete) and reactivate
 client.post("/assets/TEST-001/retire")
-check("Retire asset", "POST retire", "active=0, row and history kept",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND active=0") == 1
-      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") >= 1)
+check("Retire asset", "POST retire", "active=0, row kept",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND active=0") == 1)
 check("Retired hidden from list", "GET /assets", "TEST-001 not shown",
       'href="/assets/TEST-001"' not in client.get("/assets").get_data(as_text=True))
 check("Retired visible on request", "GET /assets?show=retired", "TEST-001 shown",
@@ -446,52 +447,70 @@ check("Show all on long lists", "every list longer than 5", "one 'Show all N' pe
       body_now.count('<details class="more">') == len(long_lists)
       and all(f"Show all {len(r)}" in body_now for r in long_lists))
 
-# 14d. Fault history: faults, resolutions and (Done)
+# 14d. An open fault is steps; one history entry when the PC is Operational again
 ev_before = count("SELECT COUNT(*) FROM maintenance")
 client.post("/assets/new", data={**GOOD, "asset_id": "HIST-1"})
 client.post("/assets/HIST-1/maintenance", data={"event_date": "2026-03-01", "fault_category": "PSU failure",
             "fault_description": "Will not power on", "action_taken": "Replaced faulty PSU", "technician": "Ali",
-            "cost": "40", "set_status": "Faulty", "status_category": "PSU failure", "status_detail": "No power"})
-h1 = client.get("/maintenance").get_data(as_text=True)
-check("Fault logged as Faulty is in history", "log fault, status Faulty", "listed, not yet (Done)",
-      "Will not power on" in h1 and "Replaced faulty PSU <span" not in h1)
+            "cost": "40", "set_status": "Faulty"})
+check("Open fault is not in the history yet", "log fault, status Faulty",
+      "no history row; its action is a step",
+      count("SELECT COUNT(*) FROM maintenance") == ev_before
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-1' AND action='Replaced faulty PSU'") == 1)
 client.post("/assets/HIST-1/maintenance", data={"event_date": "2026-03-05", "fault_category": "PSU failure",
-            "fault_description": "Repair finished", "action_taken": "Swapped in new PSU unit", "technician": "Ali",
+            "fault_description": "Will not power on", "action_taken": "Swapped in new PSU unit", "technician": "Ali",
             "cost": "0", "set_status": "Operational"})
+check("Closing writes one history entry with every step", "log the fix, status Operational",
+      "one entry; action lists both steps; cost is the total; steps cleared",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-1'") == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-1' AND action_taken LIKE '%Replaced faulty PSU%' "
+                "AND action_taken LIKE '%Swapped in new PSU unit%' AND cost_usd=40") == 1
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-1'") == 0)
 h2 = client.get("/maintenance").get_data(as_text=True)
-check("Resolved fault shows (Done)", "log the fix, status Operational",
-      "fault row and fix row both show (Done)",
-      'Replaced faulty PSU <span class="done">(Done)</span>' in h2
-      and 'Swapped in new PSU unit <span class="done">(Done)</span>' in h2)
-check("Fault and fix both counted", "2 more events", "fault events = before + 2",
-      count("SELECT COUNT(*) FROM maintenance") == ev_before + 2)
+check("Closed fault is on the Fault History page", "GET /maintenance", "the one entry shows, with (Done)",
+      "Swapped in new PSU unit" in h2 and '<span class="done">(Done)</span>' in h2)
 
 client.post("/assets/new", data={**GOOD, "asset_id": "HIST-2"})
-client.post("/assets/HIST-2/maintenance", data={"event_date": "2026-03-08", "fault_category": "RAM fault",
-            "fault_description": "Blue screens", "action_taken": "Replaced fan module", "technician": "Ali",
-            "cost": "10", "set_status": "Faulty", "status_category": "RAM fault", "status_detail": "Blue screens"})
-client.post("/assets/HIST-2/maintenance", data={"event_date": "2026-03-10", "fault_category": "RAM fault",
-            "fault_description": "Fan fitted", "action_taken": "Fitted new fan", "technician": "Ali", "cost": "0",
-            "set_status": "Operational"})
-h3 = client.get("/maintenance").get_data(as_text=True)
-check("Resolved in the Log form", "fault logged, then fix logged with category RAM fault",
-      "earlier fault now shows (Done)", 'Replaced fan module <span class="done">(Done)</span>' in h3)
-client.post("/assets/new", data={**GOOD, "asset_id": "HIST-3", "status": "Operational"})
-ev_now = count("SELECT COUNT(*) FROM maintenance")
-client.post("/assets/HIST-3/edit", data={**GOOD, "asset_id": "HIST-3", "status": "Faulty",
-                                         "status_category": "Display issue", "status_detail": "No picture",
-                                         "status_action": "Check cable", "status_technician": ""})
-check("Fault set on the Edit form is in history", "Operational -> Faulty on the Edit form",
-      "one history row with the fault details", count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-3' "
-      "AND fault_description='No picture' AND fault_category='Display issue'") == 1
-      and count("SELECT COUNT(*) FROM maintenance") == ev_now + 1)
-ev_now = count("SELECT COUNT(*) FROM maintenance")
-client.post("/assets/HIST-3/edit", data={**GOOD, "asset_id": "HIST-3", "status": "Under Repair",
-                                         "status_category": "Display issue", "status_detail": "No picture",
-                                         "status_action": "Replaced panel", "status_technician": "Ali"})
-check("Progress on the Edit form adds no history row", "Faulty -> Under Repair", "no new row; status updated",
-      count("SELECT COUNT(*) FROM maintenance") == ev_now
-      and count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-3' AND status='Under Repair'") == 1)
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Faulty", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Check cable", "status_technician": "",
+            "fault_date": "2026-03-08", "fault_cost": "0"})
+check("Fault set on the Edit form stays open", "Operational -> Faulty on the Edit form",
+      "no history row; the action is a step",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 0
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2' AND action='Check cable'") == 1)
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "",
+            "fault_date": "2026-03-12", "fault_cost": "0"})
+check("Under Repair on the Edit form needs a technician", "Under Repair, technician blank", "rejected, still Faulty",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Faulty'") == 1)
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
+            "fault_date": "2026-03-12", "fault_cost": "0"})
+check("Progress on the Edit form is a step, not history", "Faulty -> Under Repair with a new action",
+      "no history row; new step; status updated",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 0
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2' AND action='Replaced panel'") == 1
+      and count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Under Repair'") == 1)
+steps_now = count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2'")
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
+            "fault_date": "2026-03-12", "fault_cost": "0"})
+check("Saving again without changes adds no step", "same data saved twice", "no new step",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2'") == steps_now)
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Fitted panel", "status_technician": "",
+            "fault_date": "2026-03-20", "fault_cost": "15"})
+check("Closing on the Edit form needs every field", "Operational, technician blank", "rejected, still open",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Under Repair'") == 1)
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Fitted panel", "status_technician": "Ali",
+            "fault_date": "2026-03-20", "fault_cost": "15"})
+check("Closing on the Edit form writes one entry", "Operational with every field",
+      "one entry with all steps; cost 15; steps cleared",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2' AND action_taken LIKE '%Check cable%' "
+                "AND action_taken LIKE '%Replaced panel%' AND action_taken LIKE '%Fitted panel%' AND cost_usd=15") == 1
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2'") == 0)
 
 # 14e. Final sync check: every view agrees with the same data
 d_end = queries.dashboard_data()
@@ -589,9 +608,9 @@ check("Fault box on the Add form", "GET /assets/new", "box present, category def
       and "Actions to be taken" in form_new and 'name="status_technician"' in form_new)
 client.post("/assets/new", data={**GOOD, "asset_id": "FLT-1", "status": "Faulty", "status_category": "",
                                  "status_detail": "", "status_action": "", "status_technician": ""})
-check("New faulty asset needs no fault details", "status Faulty, every fault field blank", "saved as Unknown and in history",
+check("New faulty asset needs no fault details", "status Faulty, every fault field blank", "saved as Unknown; not in history until closed",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='FLT-1' AND status='Faulty' AND status_category='Unknown'") == 1
-      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='FLT-1'") == 1)
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='FLT-1'") == 0)
 client.post("/assets/new", data={**GOOD, "asset_id": "OPS-1", "status": "Operational"})
 check("Operational asset shows dashes", "GET /assets/OPS-1", "a row of '-' in every column",
       "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in client.get("/assets/OPS-1").get_data(as_text=True))
@@ -628,6 +647,40 @@ check("Log form status is required with a choose option", "GET /assets/RULE-1",
       or '<option value="">— choose —</option>\n    <option>Operational</option>' in detail)
 check("Not Assigned shown for a blank IP", "GET /assets/RULE-1", "Not Assigned in the hardware card",
       "<dd>Not Assigned</dd>" in detail)
+
+# 18. Several steps while a PC is being fixed: one history entry with all the steps
+client.post("/assets/new", data={**GOOD, "asset_id": "STEP-1"})
+client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-01", "fault_category": "", "fault_description": "",
+            "action_taken": "Step A", "technician": "", "cost": "0", "set_status": "Faulty"})
+check("Faulty step is saved, not history", "Faulty, action Step A", "step saved; no history row",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1' AND action='Step A'") == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1'") == 0)
+client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-02", "fault_category": "RAM fault",
+            "fault_description": "Memory errors", "action_taken": "Step B", "technician": "Ali",
+            "cost": "10", "set_status": "Under Repair"})
+client.post("/assets/STEP-1/edit", data={**GOOD, "asset_id": "STEP-1", "status": "Under Repair", "status_category": "RAM fault",
+            "status_detail": "Memory errors", "status_action": "Step B", "status_technician": "Ali",
+            "fault_date": "2026-04-03", "fault_cost": "0"})
+check("Unchanged action on the Edit form adds nothing", "Step B again, cost 0", "no new step",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 2)
+client.post("/assets/STEP-1/edit", data={**GOOD, "asset_id": "STEP-1", "status": "Under Repair", "status_category": "RAM fault",
+            "status_detail": "Memory errors", "status_action": "Step B", "status_technician": "Ali",
+            "fault_date": "2026-04-03", "fault_cost": "5"})
+check("A cost alone is a step without repeating the action", "same action, cost 5", "cost-only step (action blank)",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1' AND action='' AND cost_usd=5") == 1)
+client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-05", "fault_category": "RAM fault",
+            "fault_description": "Memory errors", "action_taken": "Step C", "technician": "Ali",
+            "cost": "2", "set_status": "Operational"})
+rows = count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1'")
+text = client.get("/assets/STEP-1").get_data(as_text=True)
+check("Closing combines every step into one entry", "close with Step C, cost 2", "one entry; Step B listed once; cost 17",
+      rows == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1' AND action_taken LIKE '%Step A%' "
+                "AND action_taken LIKE '%Step C%' AND cost_usd=17") == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1' AND action_taken LIKE '%Step B%'") == 1
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 0)
+check("Closed PC shows dashes in Current fault", "GET /assets/STEP-1", "a row of '-'",
+      "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in text)
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

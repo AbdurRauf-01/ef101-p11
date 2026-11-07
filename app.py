@@ -66,7 +66,7 @@ def option_lists():
     """Drop-down choices and helpers, available to every template."""
     return dict(storage_types=STORAGE_TYPES, statuses=STATUSES, ram_types=RAM_TYPES,
                 fault_categories=FAULT_CATEGORIES, locations=queries.location_names(),
-                NEW_LOCATION=NEW_LOCATION, sort_link=sort_link)
+                NEW_LOCATION=NEW_LOCATION, sort_link=sort_link, today=date.today().isoformat())
 
 
 @app.template_filter("money")
@@ -127,11 +127,48 @@ def fix_problems(category, description, action, technician):
     return problems
 
 
-def fault_event(c):
-    """History entry for a fault recorded on an asset form (cost 0; the status itself is on the asset)."""
-    return {"event_date": c["status_date"], "fault_category": c["status_category"],
-            "fault_description": c["status_detail"], "action_taken": c["status_action"],
-            "technician": c["status_technician"], "cost": 0}
+def parse_cost(text):
+    """Returns (cost, error). Blank = 0."""
+    try:
+        value = float(text or 0)
+        if value < 0:
+            raise ValueError
+        return value, None
+    except ValueError:
+        return 0.0, "Cost must be a number, zero or more."
+
+
+def fault_box(form):
+    """The Current fault box on the Edit / Add form, as typed, plus its date and cost."""
+    box = {k: (form.get(k) or "").strip() for k in
+           ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "fault_cost"]}
+    box["date"] = parse_date(box["fault_date"])
+    box["cost"], box["cost_error"] = parse_cost(box["fault_cost"])
+    return box
+
+
+def box_problems(box, closing):
+    """Date and cost of the fault box; closing also needs every fault field."""
+    problems = []
+    if box["date"] is None:
+        problems.append("Date must be a valid date (YYYY-MM-DD).")
+    elif box["date"] > date.today():
+        problems.append("Date cannot be in the future.")
+    if box["cost_error"]:
+        problems.append(box["cost_error"])
+    if closing:
+        problems += fix_problems(box["status_category"], box["status_detail"],
+                                 box["status_action"], box["status_technician"])
+    return problems
+
+
+def first_step(box, was_open, prev_action):
+    """The step to save for a submit, or None when nothing is new: a changed action, or a cost."""
+    changed = bool(box["status_action"]) and box["status_action"] != (prev_action or "")
+    if not changed and box["cost"] <= 0:
+        return None
+    return {"step_date": box["date"].isoformat(), "action": box["status_action"] if changed else "",
+            "technician": box["status_technician"], "cost": box["cost"]}
 
 
 def validate_asset(f, is_new, subnet, prev=None):
@@ -176,6 +213,8 @@ def validate_asset(f, is_new, subnet, prev=None):
         c["status_category"] = c["status_category"] or "Unknown"
         if c["status_category"] not in FAULT_CATEGORIES:
             errors.append("Choose a fault category from the list.")
+        if c["status"] == "Under Repair" and not c["status_technician"]:
+            errors.append("Technician is required when the PC is Under Repair.")
         was_faulty = prev is not None and prev["status"] in CURRENT_ERROR_STATUSES
         c["status_date"] = prev["status_date"] if (was_faulty and prev["status_date"]) else today()
 
@@ -237,6 +276,10 @@ def asset_new():
             prefix = existing_or_new_prefix(name, is_new_loc)
             if prefix:
                 form["asset_id"] = queries.next_asset_id(prefix)   # automatic ID
+        box = fault_box(form)
+        opens = form.get("status") in CURRENT_ERROR_STATUSES
+        if opens:
+            errors += box_problems(box, closing=False)
         subnet = queries.next_subnet() if is_new_loc else None
         c, more = validate_asset(form, True, subnet)
         errors += more
@@ -244,10 +287,14 @@ def asset_new():
             for e in errors:
                 flash(e, "danger")
             return render_template("asset_form.html", a=form, new=True, current_status=None)
+        step = None
+        if opens:
+            c["status_date"] = box["date"].isoformat()
+            step = first_step(box, was_open=False, prev_action=None)
         try:
             if is_new_loc:
                 queries.add_location(name, existing_or_new_prefix(name, True), subnet)
-            queries.insert_asset(c, event=fault_event(c) if c["status"] != "Operational" else None)
+            queries.insert_asset(c, step=step)
         except sqlite3.IntegrityError as e:
             flash(f"Database rejected the record: {e}", "danger")
             return render_template("asset_form.html", a=form, new=True, current_status=None)
@@ -265,7 +312,8 @@ def asset_detail(asset_id):
     events = queries.get_events(asset_id)
     total_cost = sum(e["cost_usd"] for e in events)
     return render_template("asset_detail.html", a=a, events=events, total_cost=total_cost,
-                           warranty=warranty_status(a["warranty_expiry"]), today=today())
+                           warranty=warranty_status(a["warranty_expiry"]), today=today(),
+                           steps=queries.get_steps(asset_id))
 
 
 @app.route("/assets/<asset_id>/edit", methods=["GET", "POST"])
@@ -282,12 +330,12 @@ def asset_edit(asset_id):
         errors = []
         if is_new_loc and not name:
             errors.append("Type the name of the new location (for example Lab 4).")
+        box = fault_box(form)
+        was_open = current_status in CURRENT_ERROR_STATUSES
+        closing = was_open and form.get("status") == "Operational"
+        if closing or form.get("status") in CURRENT_ERROR_STATUSES:
+            errors += box_problems(box, closing=closing)
         subnet = queries.next_subnet() if is_new_loc else None
-        # Faulty / Under Repair -> Operational: the fix is recorded here; every fault field is required.
-        closing = current_status in CURRENT_ERROR_STATUSES and form.get("status") == "Operational"
-        if closing:
-            errors += fix_problems((form.get("status_category") or "").strip(), (form.get("status_detail") or "").strip(),
-                                   (form.get("status_action") or "").strip(), (form.get("status_technician") or "").strip())
         c, more = validate_asset(form, False, subnet, a)
         errors += more
         if errors:
@@ -297,15 +345,18 @@ def asset_edit(asset_id):
         if is_new_loc:
             queries.add_location(name, existing_or_new_prefix(name, True), subnet)
         if closing:
-            fix = {"event_date": today(), "fault_category": (form.get("status_category") or "").strip(),
-                   "fault_description": (form.get("status_detail") or "").strip(),
-                   "action_taken": (form.get("status_action") or "").strip(),
-                   "technician": (form.get("status_technician") or "").strip(), "cost": 0}
-            queries.update_asset(asset_id, c, event=fix)
-            flash("Asset is Operational. The fix is recorded in the fault history.", "success")
+            close = {"event_date": box["date"].isoformat(), "fault_category": box["status_category"],
+                     "fault_description": box["status_detail"], "action": box["status_action"],
+                     "technician": box["status_technician"], "cost": box["cost"]}
+            queries.update_asset(asset_id, c, close=close)
+            flash("Asset is Operational. The fault is recorded in the history as one entry.", "success")
             return redirect(url_for("asset_detail", asset_id=asset_id))
-        new_fault = current_status == "Operational" and c["status"] != "Operational"
-        queries.update_asset(asset_id, c, event=fault_event(c) if new_fault else None)
+        step = None
+        if c["status"] in CURRENT_ERROR_STATUSES:
+            if not was_open:
+                c["status_date"] = box["date"].isoformat()     # the fault starts on this date
+            step = first_step(box, was_open=was_open, prev_action=a["status_action"] if was_open else None)
+        queries.update_asset(asset_id, c, step=step)
         flash("Asset updated.", "success")
         return redirect(url_for("asset_detail", asset_id=asset_id))
     # the form template uses a.get(...), which a sqlite3.Row does not have: convert to a
@@ -346,35 +397,32 @@ def maintenance_add(asset_id):
         errors.append("Choose the status the asset will have: Operational, Faulty or Under Repair.")
     if f["fault_category"] and f["fault_category"] not in FAULT_CATEGORIES:
         errors.append("Choose a fault category from the list.")
-    try:
-        cost = float(f["cost"] or 0)
-        if cost < 0:
-            raise ValueError
-    except ValueError:
-        errors.append("Cost must be a number, zero or more.")
-        cost = 0
+    cost, cost_error = parse_cost(f["cost"])
+    if cost_error:
+        errors.append(cost_error)
     if new_status == "Operational":
         errors += fix_problems(f["fault_category"], f["fault_description"], f["action_taken"], f["technician"])
     elif new_status == "Under Repair" and not f["technician"]:
-        errors.append("Technician is required when the asset is Under Repair.")
+        errors.append("Technician is required when the PC is Under Repair.")
     if new_status in CURRENT_ERROR_STATUSES:
         f["fault_category"] = f["fault_category"] or "Unknown"   # blank category = Unknown
     if errors:
         for e in errors:
             flash(e, "danger")
         return redirect(url_for("asset_detail", asset_id=asset_id))
-    was_faulty = asset["status"] in CURRENT_ERROR_STATUSES
+    was_open = asset["status"] in CURRENT_ERROR_STATUSES
     current = None
     if new_status in CURRENT_ERROR_STATUSES:
-        # the fault on the Log form becomes the asset's current fault; the date is kept while it stays open
         current = {"category": f["fault_category"], "detail": f["fault_description"],
                    "action": f["action_taken"], "technician": f["technician"],
-                   "date": asset["status_date"] if (was_faulty and asset["status_date"]) else today()}
-    queries.add_event(asset_id, f, cost, new_status, current)
-    if new_status == "Operational" and was_faulty:
-        flash("Fix logged. The asset is Operational and its current fault is closed.", "success")
-    else:
+                   "date": asset["status_date"] if (was_open and asset["status_date"]) else f["event_date"]}
+    queries.log_event(asset_id, f, cost, new_status, current)
+    if new_status == "Operational" and was_open:
+        flash("Fault closed. The asset is Operational and the fault is recorded in the history as one entry.", "success")
+    elif new_status == "Operational":
         flash("Maintenance event logged.", "success")
+    else:
+        flash("Saved. The fault stays open; it goes into the history when the PC is Operational again.", "success")
     return redirect(url_for("asset_detail", asset_id=asset_id))
 
 
