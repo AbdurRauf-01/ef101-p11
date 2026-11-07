@@ -132,9 +132,14 @@ def filtered_assets(args):
         q += " AND a.warranty_expiry < date('now')"
     elif w == "Active":
         q += " AND a.warranty_expiry >= date('now')"
-    col = SORT_COLUMNS.get(args.get("sort"), SORT_COLUMNS["asset_id"])
-    direction = "DESC" if args.get("dir") == "desc" else "ASC"
-    q += f" ORDER BY {col} {direction}, a.asset_id"       # column and direction come from fixed lists
+    if args.get("sort") == "status":
+        first = args.get("first") if args.get("first") in ("Operational", "Under Repair", "Faulty") else "Operational"
+        q += " ORDER BY (CASE WHEN a.status=? THEN 0 ELSE 1 END), a.status, a.asset_id"
+        p.append(first)
+    else:
+        col = SORT_COLUMNS.get(args.get("sort"), SORT_COLUMNS["asset_id"])
+        direction = "DESC" if args.get("dir") == "desc" else "ASC"
+        q += f" ORDER BY {col} {direction}, a.asset_id"   # column and direction come from fixed lists
     return get_db().execute(q, p).fetchall()
 
 
@@ -149,23 +154,23 @@ def filter_options():
 
 
 # ---- Assets: write ----------------------------------------------------------
-def _record_fault(db, c):
-    """History entry for a fault recorded on the asset form (cost 0; the status itself is on the asset)."""
+def _insert_event(db, asset_id, ev):
+    """One maintenance event, written inside the caller's transaction."""
     db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
                "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
-               (c["asset_id"], c["status_date"], c["status_category"], c["status_detail"] or "",
-                c["status_action"] or "", c["status_technician"] or "", 0))
+               (asset_id, ev["event_date"], ev["fault_category"], ev.get("fault_description") or "",
+                ev.get("action_taken") or "", ev.get("technician") or "", ev.get("cost", 0)))
 
 
-def insert_asset(c, fault_record=False):
+def insert_asset(c, event=None):
     """c = validated dict with every key in FIELDS. May raise sqlite3.IntegrityError
     (the transaction is rolled back and the connection closed first)."""
     db = get_db()
     try:
         db.execute(f"INSERT INTO assets ({','.join(FIELDS)}, active) VALUES ({','.join('?' * len(FIELDS))}, 1)",
                    [c[k] for k in FIELDS])
-        if fault_record:
-            _record_fault(db, c)
+        if event:
+            _insert_event(db, c["asset_id"], event)
         db.commit()
     except Exception:
         db.rollback()
@@ -174,15 +179,15 @@ def insert_asset(c, fault_record=False):
         db.close()
 
 
-def update_asset(asset_id, c, fault_record=False):
-    """The primary key (asset_id) is never changed."""
+def update_asset(asset_id, c, event=None):
+    """The primary key (asset_id) is never changed. event = optional history entry (new fault or fix)."""
     db = get_db()
     try:
         sets = ",".join(f"{k}=?" for k in FIELDS if k != "asset_id")
         db.execute(f"UPDATE assets SET {sets} WHERE asset_id=?",
                    [c[k] for k in FIELDS if k != "asset_id"] + [asset_id])
-        if fault_record:
-            _record_fault(db, c)
+        if event:
+            _insert_event(db, asset_id, event)
         db.commit()
     except Exception:
         db.rollback()
@@ -331,37 +336,6 @@ def location_subnet(name):
 def next_subnet():
     """Range number for the next new place: one more than the highest in use."""
     return get_db().execute("SELECT COALESCE(MAX(ip_subnet),0)+1 FROM locations").fetchone()[0]
-
-
-def pick_ip(subnet, asset_id, used):
-    """Automatic IP for a PC in the range 192.168.<subnet>.n.
-    The number at the end of the asset ID is the host number when it is free:
-    L1-PC-004 -> 192.168.1.4, L2-PC-008 -> 192.168.2.8. Otherwise the lowest free number is used.
-    Returns None when the whole range is taken."""
-    if subnet is None:
-        return None
-    m = re.search(r"(\d+)$", asset_id or "")
-    if m:
-        host = int(m.group(1))
-        ip = f"192.168.{subnet}.{host}"
-        if 1 <= host <= 254 and ip not in used:
-            return ip
-    for host in range(1, 255):
-        ip = f"192.168.{subnet}.{host}"
-        if ip not in used:
-            return ip
-    return None
-
-
-def used_ips(location, exclude_id=""):
-    """IPs already taken by other PCs in this place (exclude_id = the PC being edited)."""
-    rows = get_db().execute("SELECT ip_address FROM assets WHERE location=? AND asset_id<>?",
-                            (location, exclude_id or "")).fetchall()
-    return {r[0] for r in rows if r[0]}
-
-
-def auto_ip(subnet, asset_id, location, exclude_id=""):
-    return pick_ip(subnet, asset_id, used_ips(location, exclude_id))
 
 
 def ip_owner(location, ip, exclude_id=""):

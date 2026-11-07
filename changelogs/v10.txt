@@ -1,0 +1,28 @@
+What changed:
+
+1. Status sorting
+- Clicking the Status heading cycles the status that comes first: Operational, then Under Repair, then Faulty, then back to Operational.
+- The arrow stays ▲ and changes colour: green for Operational, yellow for Under Repair, red for Faulty.
+- The other statuses follow in alphabetical order, and each group is sorted by Asset ID. I read “then by alphabetic” as the rest of the list sorting alphabetically by status.
+
+2. IP rollback
+- Auto-assignment is removed. A blank IP is stored as empty and shown as “Not Assigned”.
+- The one-PC-per-IP rule per place is still enforced, both in the app and in the database.
+- The 38 demo IPs are unchanged. The place range numbers stay in the database but the app no longer uses them. They can be removed later.
+
+3. Closing a fault on the Edit form
+- Switching a faulty asset to Operational makes the four fault fields required, and the save is blocked until they’re filled in.
+- The fault category can’t be Unknown when closing a fault.
+- The fix is saved directly as a history entry. The asset becomes Operational immediately, instead of being redirected to the Log form.
+
+4. “-” after closing
+- The Current fault section shows “-” in every column after the fault is closed. This now works for both the Edit form and the Log form.
+
+5. Log form requirements
+- Faulty: the category, description, action, and technician are all optional. A blank category is saved as Unknown.
+- Under Repair: the technician is required.
+- Operational: every field is required except cost.
+- For Faulty and Under Repair, the label reads “Action to be taken”; for Operational it reads “Action taken”.
+
+6. Status on the Log form
+- The status drop-down is required and starts with “— choose —”. “(no change)” is gone, so every event now states the asset’s status.

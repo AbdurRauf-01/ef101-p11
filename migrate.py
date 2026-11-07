@@ -5,7 +5,7 @@ A backup is written first to inventory.db.bak. Running it again changes nothing 
 What it does:
   * gives every place its range number x (IP range 192.168.x.n), in the order the places were created;
   * keeps every valid IP address that is unique inside its place;
-  * assigns a new IP (same rule as the app) to PCs whose IP is blank or repeated inside their place.
+  * leaves a PC's IP as Not Assigned when it is blank or repeated inside its place (no automatic IPs).
 """
 import ipaddress
 import os
@@ -14,7 +14,6 @@ import sqlite3
 from collections import defaultdict
 from pathlib import Path
 
-import queries  # pick_ip: the same IP rule the app and seed.py use
 from datetime import date
 from queries import FAULT_CATEGORIES
 
@@ -71,14 +70,9 @@ def main():
             final_ip[a["asset_id"]] = ip
     changed = []
     for a in assets:
-        if a["asset_id"] in final_ip:
-            continue
-        ip = queries.pick_ip(subnet[a["location"]], a["asset_id"], used[a["location"]])
-        if ip is None:
-            raise SystemExit(f"No free IP left in {a['location']}. Nothing was changed.")
-        used[a["location"]].add(ip)
-        final_ip[a["asset_id"]] = ip
-        changed.append((a["asset_id"], a["location"], a["ip_address"] or "(blank)", ip))
+        if a["asset_id"] not in final_ip:      # blank, or repeated inside its place: left as Not Assigned
+            final_ip[a["asset_id"]] = None
+            changed.append((a["asset_id"], a["location"], a["ip_address"] or "(blank)", "Not Assigned"))
 
     # 2. Rebuild the database from schema.sql and copy every row. The original is only replaced at the end,
     #    so a failure leaves inventory.db untouched.
@@ -107,7 +101,7 @@ def main():
     print(f"Places (range number x): " + ", ".join(f"{n} = {subnet[n]}" for n, _ in places))
     print(f"Assets copied: {len(assets)}   Maintenance events copied: {len(events)}")
     if changed:
-        print(f"IP addresses assigned automatically: {len(changed)}")
+        print(f"IP addresses left as Not Assigned: {len(changed)}")
         for aid, loc, old_ip, ip in changed:
             print(f"  {aid:<12} {loc:<15} {old_ip:<16} -> {ip}")
     else:

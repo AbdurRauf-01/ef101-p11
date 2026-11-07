@@ -23,31 +23,41 @@ app.secret_key = "ef101-demo-key"  # demo only; no real secrets in this project
 # Allowed values below must match the CHECK constraints in schema.sql.
 STATUSES = ["Operational", "Faulty", "Under Repair"]
 STORAGE_TYPES = ["SSD", "NVMe", "HDD", "Hybrid"]
+STATUS_ORDER = ["Operational", "Under Repair", "Faulty"]   # clicks on the Status heading cycle through these
 NEW_LOCATION = "__new__"    # drop-down value meaning "+ Add new location"
 ASSET_COLUMNS = [("asset_id", "Asset ID"), ("model", "Model"), ("cpu", "CPU"), ("ram", "RAM"),
                  ("storage", "Storage"), ("gpu", "GPU"), ("location", "Location"), ("status", "Status"),
                  ("warranty", "Warranty"), ("faults", "Faults")]
-RESOLVE_NEEDS_FAULT = ("To mark the asset Operational, the fault category must be specified "
-                       "(not Unknown).")
-RESOLVE_NOTE = ("Other changes are saved. The fault is now on the asset page: log the fix in "
-                "'Log a fault / maintenance event' to mark the asset Operational.")
 
 
 def current_sort():
     """Sort column and direction from the URL. Default: Asset ID, ascending."""
     key = request.args.get("sort")
-    key = key if key in SORT_COLUMNS else "asset_id"
+    key = key if key in SORT_COLUMNS or key == "status" else "asset_id"
     direction = "desc" if request.args.get("dir") == "desc" else "asc"
     return key, direction
 
 
+def current_first():
+    """The status that is listed first when the list is sorted by Status."""
+    first = request.args.get("first")
+    return first if first in STATUS_ORDER else STATUS_ORDER[0]
+
+
 def sort_link(col):
-    """Link for a column heading: a new column starts ascending; the same column flips direction.
-    Filters and search stay in the link."""
+    """Link for a column heading. A new column starts ascending; the same column flips direction.
+    The Status heading cycles the first status group. Filters and search stay in the link."""
     args = request.args.to_dict()
     key, direction = current_sort()
-    new = "desc" if (col == key and direction == "asc") else "asc"
-    args.update(sort=col, dir=new)
+    if col == "status":
+        nxt = STATUS_ORDER[(STATUS_ORDER.index(current_first()) + 1) % len(STATUS_ORDER)] if key == "status" \
+            else STATUS_ORDER[0]
+        args.update(sort="status", first=nxt)
+        args.pop("dir", None)
+    else:
+        new = "desc" if (col == key and direction == "asc") else "asc"
+        args.update(sort=col, dir=new)
+        args.pop("first", None)
     return url_for("assets", **args)
 
 
@@ -106,9 +116,27 @@ def existing_or_new_prefix(name, is_new):
     return queries.location_prefix(name)
 
 
+def fix_problems(category, description, action, technician):
+    """Closing a fault (status Operational) needs every field except cost; the category may not be Unknown."""
+    problems = []
+    if category not in FAULT_CATEGORIES or category == "Unknown":
+        problems.append("To mark the asset Operational, the fault category must be specified (not Unknown).")
+    for label, value in [("Fault description", description), ("Action taken", action), ("Technician", technician)]:
+        if not value:
+            problems.append(f"{label} is required to mark the asset Operational.")
+    return problems
+
+
+def fault_event(c):
+    """History entry for a fault recorded on an asset form (cost 0; the status itself is on the asset)."""
+    return {"event_date": c["status_date"], "fault_category": c["status_category"],
+            "fault_description": c["status_detail"], "action_taken": c["status_action"],
+            "technician": c["status_technician"], "cost": 0}
+
+
 def validate_asset(f, is_new, subnet, prev=None):
     """Server-side validation. Returns (clean_dict, errors_list).
-    subnet = x of the chosen place's range 192.168.x.n, used when the IP box is left blank.
+    subnet is no longer used for IP addresses (no automatic assignment); it is kept for the place table.
     prev = the asset as it is in the database (None for a new asset)."""
     errors = []
     c = {k: (f.get(k) or "").strip() for k in FIELDS}
@@ -140,7 +168,7 @@ def validate_asset(f, is_new, subnet, prev=None):
     if c["status"] not in STATUSES:
         errors.append("Choose a valid status.")
 
-    # Current fault. Everything here is optional: a blank category becomes "Unknown".
+    # Current fault. Everything here is optional on this form: a blank category becomes "Unknown".
     if c["status"] == "Operational":
         for k in CURRENT_FAULT_FIELDS:
             c[k] = None                  # a working asset has no current fault (shown as "-")
@@ -151,9 +179,10 @@ def validate_asset(f, is_new, subnet, prev=None):
         was_faulty = prev is not None and prev["status"] in CURRENT_ERROR_STATUSES
         c["status_date"] = prev["status_date"] if (was_faulty and prev["status_date"]) else today()
 
-    # IP address: blank = assigned automatically. Two PCs in the same place never share an IP.
-    loc, aid = c["location"], c["asset_id"]
-    skip_self = "" if is_new else aid           # when editing, a PC does not conflict with itself
+    # IP address: optional. Blank stays "Not Assigned" (no automatic assignment).
+    # Two PCs in the same place never share an IP.
+    loc = c["location"]
+    skip_self = "" if is_new else c["asset_id"]  # when editing, a PC does not conflict with itself
     if c["ip_address"]:
         try:
             ipaddress.IPv4Address(c["ip_address"])
@@ -163,11 +192,7 @@ def validate_asset(f, is_new, subnet, prev=None):
             owner = queries.ip_owner(loc, c["ip_address"], skip_self) if loc else None
             if owner:
                 errors.append(f"IP {c['ip_address']} is already used by {owner} in {loc}. "
-                              "Each PC in one place needs its own IP: clear the IP box to assign one automatically.")
-    elif loc and aid and subnet:
-        c["ip_address"] = queries.auto_ip(subnet, aid, loc, skip_self) or ""
-        if not c["ip_address"]:
-            errors.append(f"No free IP address is left in the range for {loc}.")
+                              "Each PC in one place needs its own IP.")
     c["ip_address"] = c["ip_address"] or None
 
     p, w = parse_date(c["purchase_date"]), parse_date(c["warranty_expiry"])
@@ -196,7 +221,7 @@ def assets():
     enriched = [dict(r, warranty=warranty_status(r["warranty_expiry"])) for r in rows]
     key, direction = current_sort()
     return render_template("assets.html", assets=enriched, opts=opts, f=request.args,
-                           sort=key, direction=direction, columns=ASSET_COLUMNS)
+                           sort=key, direction=direction, first=current_first(), columns=ASSET_COLUMNS)
 
 
 @app.route("/assets/new", methods=["GET", "POST"])
@@ -205,7 +230,6 @@ def asset_new():
         form = dict(request.form)
         name, is_new_loc = resolve_location(request.form)
         form["location"] = name
-        subnet = queries.next_subnet() if is_new_loc else queries.location_subnet(name)
         errors = []
         if is_new_loc and not name:
             errors.append("Type the name of the new location (for example Lab 4).")
@@ -213,6 +237,7 @@ def asset_new():
             prefix = existing_or_new_prefix(name, is_new_loc)
             if prefix:
                 form["asset_id"] = queries.next_asset_id(prefix)   # automatic ID
+        subnet = queries.next_subnet() if is_new_loc else None
         c, more = validate_asset(form, True, subnet)
         errors += more
         if errors:
@@ -222,11 +247,11 @@ def asset_new():
         try:
             if is_new_loc:
                 queries.add_location(name, existing_or_new_prefix(name, True), subnet)
-            queries.insert_asset(c, fault_record=c["status"] != "Operational")
+            queries.insert_asset(c, event=fault_event(c) if c["status"] != "Operational" else None)
         except sqlite3.IntegrityError as e:
             flash(f"Database rejected the record: {e}", "danger")
             return render_template("asset_form.html", a=form, new=True, current_status=None)
-        flash(f"Asset {c['asset_id']} added (IP {c['ip_address']}).", "success")
+        flash(f"Asset {c['asset_id']} added (IP {c['ip_address'] or 'Not Assigned'}).", "success")
         return redirect(url_for("asset_detail", asset_id=c["asset_id"]))
     return render_template("asset_form.html", a={}, new=True, current_status=None)
 
@@ -240,8 +265,7 @@ def asset_detail(asset_id):
     events = queries.get_events(asset_id)
     total_cost = sum(e["cost_usd"] for e in events)
     return render_template("asset_detail.html", a=a, events=events, total_cost=total_cost,
-                           warranty=warranty_status(a["warranty_expiry"]), today=today(),
-                           resolve=request.args.get("resolve") == "1")
+                           warranty=warranty_status(a["warranty_expiry"]), today=today())
 
 
 @app.route("/assets/<asset_id>/edit", methods=["GET", "POST"])
@@ -255,17 +279,15 @@ def asset_edit(asset_id):
         form["asset_id"] = asset_id                       # primary key is never changed
         name, is_new_loc = resolve_location(request.form)
         form["location"] = name
-        subnet = queries.next_subnet() if is_new_loc else queries.location_subnet(name)
         errors = []
         if is_new_loc and not name:
             errors.append("Type the name of the new location (for example Lab 4).")
-        # Faulty / Under Repair -> Operational is not done here: the fault moves to the Log form on the
-        # asset page, where the fix is recorded. Other changes on this form are still saved.
-        resolving = current_status in CURRENT_ERROR_STATUSES and form.get("status") == "Operational"
-        if resolving:
-            form["status"] = current_status
-            for k in CURRENT_FAULT_FIELDS:
-                form[k] = a[k] or ""
+        subnet = queries.next_subnet() if is_new_loc else None
+        # Faulty / Under Repair -> Operational: the fix is recorded here; every fault field is required.
+        closing = current_status in CURRENT_ERROR_STATUSES and form.get("status") == "Operational"
+        if closing:
+            errors += fix_problems((form.get("status_category") or "").strip(), (form.get("status_detail") or "").strip(),
+                                   (form.get("status_action") or "").strip(), (form.get("status_technician") or "").strip())
         c, more = validate_asset(form, False, subnet, a)
         errors += more
         if errors:
@@ -274,11 +296,16 @@ def asset_edit(asset_id):
             return render_template("asset_form.html", a=form, new=False, current_status=current_status)
         if is_new_loc:
             queries.add_location(name, existing_or_new_prefix(name, True), subnet)
+        if closing:
+            fix = {"event_date": today(), "fault_category": (form.get("status_category") or "").strip(),
+                   "fault_description": (form.get("status_detail") or "").strip(),
+                   "action_taken": (form.get("status_action") or "").strip(),
+                   "technician": (form.get("status_technician") or "").strip(), "cost": 0}
+            queries.update_asset(asset_id, c, event=fix)
+            flash("Asset is Operational. The fix is recorded in the fault history.", "success")
+            return redirect(url_for("asset_detail", asset_id=asset_id))
         new_fault = current_status == "Operational" and c["status"] != "Operational"
-        queries.update_asset(asset_id, c, fault_record=new_fault)
-        if resolving:
-            flash(RESOLVE_NOTE, "success")
-            return redirect(url_for("asset_detail", asset_id=asset_id, resolve=1))
+        queries.update_asset(asset_id, c, event=fault_event(c) if new_fault else None)
         flash("Asset updated.", "success")
         return redirect(url_for("asset_detail", asset_id=asset_id))
     # the form template uses a.get(...), which a sqlite3.Row does not have: convert to a
@@ -308,17 +335,17 @@ def maintenance_add(asset_id):
         return render_template("message.html", title="Asset not found", text=asset_id), 404
     f = {k: (request.form.get(k) or "").strip() for k in
          ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost"]}
+    new_status = request.form.get("set_status")
     errors = []
     d = parse_date(f["event_date"])
     if not d:
         errors.append("Event date must be a valid date (YYYY-MM-DD).")
     elif d > date.today():
         errors.append("Event date cannot be in the future.")
-    if f["fault_category"] not in FAULT_CATEGORIES:
+    if new_status not in STATUSES:
+        errors.append("Choose the status the asset will have: Operational, Faulty or Under Repair.")
+    if f["fault_category"] and f["fault_category"] not in FAULT_CATEGORIES:
         errors.append("Choose a fault category from the list.")
-    for k in ["fault_description", "action_taken", "technician"]:
-        if not f[k]:
-            errors.append(f"{k.replace('_', ' ').title()} is required.")
     try:
         cost = float(f["cost"] or 0)
         if cost < 0:
@@ -326,16 +353,17 @@ def maintenance_add(asset_id):
     except ValueError:
         errors.append("Cost must be a number, zero or more.")
         cost = 0
-    new_status = request.form.get("set_status")
-    if new_status not in STATUSES:
-        new_status = None                       # blank = no status change
-    was_faulty = asset["status"] in CURRENT_ERROR_STATUSES
-    if new_status == "Operational" and was_faulty and f["fault_category"] == "Unknown":
-        errors.append(RESOLVE_NEEDS_FAULT)
+    if new_status == "Operational":
+        errors += fix_problems(f["fault_category"], f["fault_description"], f["action_taken"], f["technician"])
+    elif new_status == "Under Repair" and not f["technician"]:
+        errors.append("Technician is required when the asset is Under Repair.")
+    if new_status in CURRENT_ERROR_STATUSES:
+        f["fault_category"] = f["fault_category"] or "Unknown"   # blank category = Unknown
     if errors:
         for e in errors:
             flash(e, "danger")
         return redirect(url_for("asset_detail", asset_id=asset_id))
+    was_faulty = asset["status"] in CURRENT_ERROR_STATUSES
     current = None
     if new_status in CURRENT_ERROR_STATUSES:
         # the fault on the Log form becomes the asset's current fault; the date is kept while it stays open

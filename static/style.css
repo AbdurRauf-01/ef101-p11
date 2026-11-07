@@ -102,3 +102,6 @@ th a.sortlink:hover{text-decoration:underline}
 .arrow.faint{color:var(--muted);opacity:.6}
 .fault-box{margin-top:16px;padding:12px 14px;border:1px dashed var(--line);border-radius:8px}
 .fault-box h3{margin:0 0 4px;font-size:.95rem}
+.arrow.st-Operational{color:var(--ok);opacity:1}
+.arrow.st-Under-Repair{color:#e6b800;opacity:1}
+.arrow.st-Faulty{color:var(--bad);opacity:1}

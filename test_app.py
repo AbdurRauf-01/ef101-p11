@@ -130,40 +130,43 @@ check("Invalid event rejected", "negative cost / future date / unknown category"
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1
       and count("SELECT COUNT(*) FROM maintenance WHERE fault_description='bogus'") == 0)
 
-# 6b. Current fault: its fields are optional (blank category = Unknown). The Edit form cannot close a fault;
-#     the fix is logged on the Log form, with a fault category other than Unknown.
-client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Faulty", "action_taken": "",
-                                                    "fault_description": "no action yet"})
-check("Log form: action still required", "set Faulty, action blank", "rejected, nothing saved",
-      count("SELECT COUNT(*) FROM maintenance WHERE fault_description='no action yet'") == 0)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "", "status_detail": "",
-                                           "status_action": "", "status_technician": ""})
-check("Edit form: fault fields optional", "status Faulty, every fault field blank", "saved, category becomes Unknown",
+# 6b. Fault rules on the Log form and the Edit form
+client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Under Repair", "technician": "",
+                                                    "fault_description": "tech missing"})
+check("Under Repair needs a technician", "Under Repair, technician blank", "rejected, nothing saved",
+      count("SELECT COUNT(*) FROM maintenance WHERE fault_description='tech missing'") == 0)
+client.post("/assets/TEST-001/maintenance", data={"event_date": "2026-01-06", "fault_category": "",
+            "fault_description": "", "action_taken": "", "technician": "", "cost": "", "set_status": "Faulty"})
+check("Faulty needs no fault details", "Faulty, every fault field blank", "saved; category becomes Unknown",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty' AND status_category='Unknown'") == 1)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational"})
-check("Edit form cannot close a fault", "status Operational on the Edit form", "status stays Faulty",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty'") == 1)
-client.post("/assets/TEST-001/maintenance", data={**ev, "fault_category": "Unknown", "fault_description": "fix attempt",
-                                                    "set_status": "Operational"})
+client.post("/assets/TEST-001/maintenance", data={"event_date": "2026-01-07", "fault_category": "Unknown",
+            "fault_description": "fix attempt", "action_taken": "x", "technician": "Ali", "cost": "0", "set_status": "Operational"})
 check("Fix needs a fault category other than Unknown", "set Operational, category Unknown", "rejected",
       count("SELECT COUNT(*) FROM maintenance WHERE fault_description='fix attempt'") == 0)
+client.post("/assets/TEST-001/maintenance", data={"event_date": "2026-01-07", "fault_category": "Disk failure",
+            "fault_description": "no status", "action_taken": "x", "technician": "Ali", "cost": "0", "set_status": ""})
+check("Status must be chosen on the Log form", "no status chosen", "rejected",
+      count("SELECT COUNT(*) FROM maintenance WHERE fault_description='no status'") == 0)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational", "status_category": "Unknown",
+            "status_detail": "", "status_action": "", "status_technician": ""})
+check("Edit form: closing needs every field", "status Operational, fields blank", "rejected, status stays Faulty",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty'") == 1)
 client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "Overheating",
-                                           "status_detail": "Hot CPU", "status_action": "Clean fans",
-                                           "status_technician": "Sara"})
+            "status_detail": "Hot CPU", "status_action": "Clean fans", "status_technician": "Sara"})
 detail = client.get("/assets/TEST-001").get_data(as_text=True)
 check("Current fault section shows the entry", "GET /assets/TEST-001", "Hot CPU, Clean fans, Sara shown",
       "Hot CPU" in detail and "Clean fans" in detail and "Sara" in detail)
 check("Log form is prefilled from the current fault", "GET /assets/TEST-001", "Overheating selected, fields filled",
       "<option selected>Overheating</option>" in detail and 'value="Hot CPU"' in detail
       and 'value="Clean fans"' in detail and 'value="Sara"' in detail)
-client.post("/assets/TEST-001/maintenance", data={"event_date": "2026-03-20", "fault_category": "Overheating",
-            "fault_description": "Hot CPU", "action_taken": "Clean fans", "technician": "Sara", "cost": "0",
-            "set_status": "Operational"})
-check("Log form closes the fault", "set Operational with the prefilled details", "status Operational, fault fields NULL",
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational", "status_category": "Overheating",
+            "status_detail": "Hot CPU", "status_action": "Clean fans", "status_technician": "Sara"})
+check("Edit form closes the fault", "status Operational with all fields", "status Operational, fault fields NULL",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Operational' AND status_category IS NULL "
             "AND status_detail IS NULL AND status_action IS NULL AND status_technician IS NULL AND status_date IS NULL") == 1)
-check("The fix is in the history", "the resolving event", "one history row for the fault",
-      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001' AND fault_description='Hot CPU'") == 1)
+check("The fix is in the history", "the closing edit", "one history row with the fix details",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001' AND fault_description='Hot CPU' "
+            "AND action_taken='Clean fans' AND technician='Sara'") == 1)
 detail = client.get("/assets/TEST-001").get_data(as_text=True)
 check("Current fault shows dashes when Operational", "GET /assets/TEST-001", "a row of '-' in every column",
       "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in detail)
@@ -348,8 +351,7 @@ check("Reactivate: totals and charts restore it", "reactivate", "total +1 again"
 client.post(f"/assets/{S}/maintenance", data={"event_date": "2026-02-01", "fault_category": "Other",
                                               "fault_description": "Unexplained reboot",
                                               "action_taken": "Logged, monitored", "technician": "Ali",
-                                              "cost": "12", "set_status": "", "status_category": "",
-                                              "status_detail": ""})
+                                              "cost": "12", "set_status": "Operational"})
 d5 = queries.dashboard_data()
 check("Log event: failure chart", "fault category Other", "Other +1 in the failure chart",
       fault(d5)["Other"] == fault(base)["Other"] + 1)
@@ -507,9 +509,10 @@ check("Final: maintenance CSV matches history", "GET /export/maintenance.csv", "
 
 # 15. IP addresses: unique inside a place, automatic from the asset ID and the place's range
 c = db.get_db()
-lab1 = c.execute("SELECT ip_address FROM assets WHERE location='Lab 1' AND active=1 ORDER BY asset_id LIMIT 1").fetchone()[0]
+lab1 = c.execute("SELECT ip_address FROM assets WHERE location='Lab 1' AND active=1 AND ip_address IS NOT NULL "
+                 "ORDER BY asset_id LIMIT 1").fetchone()[0]
 lib_ips = {r[0] for r in c.execute("SELECT ip_address FROM assets WHERE location='Library'")}
-lab1_free_in_library = next(r[0] for r in c.execute("SELECT ip_address FROM assets WHERE location='Lab 1' ORDER BY asset_id")
+lab1_free_in_library = next(r[0] for r in c.execute("SELECT ip_address FROM assets WHERE location='Lab 1' AND ip_address IS NOT NULL ORDER BY asset_id")
                             if r[0] not in lib_ips)
 c.close()
 n_before = count("SELECT COUNT(*) FROM assets")
@@ -520,22 +523,23 @@ client.post("/assets/new", data={**GOOD, "asset_id": "", "location": "Library", 
 check("Same IP in a different place allowed", f"Library PC with {lab1_free_in_library}", "saved",
       count("SELECT COUNT(*) FROM assets") == n_before + 1)
 client.post("/assets/new", data={**GOOD, "asset_id": "LIB-PC-077", "location": "Library", "ip_address": ""})
-check("Automatic IP from the asset ID", "LIB-PC-077, IP blank, Library range 6", "192.168.6.77",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='LIB-PC-077' AND ip_address='192.168.6.77'") == 1)
+check("Blank IP stays Not Assigned", "LIB-PC-077, IP blank", "stored as NULL, page shows Not Assigned",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='LIB-PC-077' AND ip_address IS NULL") == 1
+      and "Not Assigned" in client.get("/assets/LIB-PC-077").get_data(as_text=True))
 check("Place ranges are 1 to 6 for the demo places", "locations table", "Lab 1 = 1, Library = 6",
       count("SELECT ip_subnet FROM locations WHERE name='Lab 1'") == 1
       and count("SELECT ip_subnet FROM locations WHERE name='Library'") == 6)
 check("Lab 4 gets the next range (7)", "Lab 4 added earlier", "ip_subnet = 7",
       count("SELECT COUNT(*) FROM locations WHERE name='Lab 4' AND ip_subnet=7") == 1)
-check("Asset in Lab 4 gets 192.168.7.n", "L4-PC-001 in Lab 4", "IP 192.168.7.1",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='L4-PC-001' AND ip_address='192.168.7.1'") == 1)
+check("New place PCs are not auto-assigned an IP", "L4-PC-001 in Lab 4", "IP stays NULL",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='L4-PC-001' AND ip_address IS NULL") == 1)
 c = db.get_db()
 nxt = c.execute("SELECT COALESCE(MAX(ip_subnet),0)+1 FROM locations").fetchone()[0]
 c.close()
 client.post("/assets/new", data={**GOOD, "asset_id": "", "location": appmod.NEW_LOCATION, "new_location": "Lab 9"})
-check("Next new place gets the next range", "new place 'Lab 9'", f"range {nxt} and its first PC is 192.168.{nxt}.1",
+check("Next new place gets the next range", "new place 'Lab 9'", f"range {nxt} kept; its PC has no IP",
       count("SELECT COUNT(*) FROM locations WHERE name='Lab 9' AND ip_subnet=?", nxt) == 1
-      and count("SELECT COUNT(*) FROM assets WHERE location='Lab 9' AND ip_address=?", f"192.168.{nxt}.1") == 1)
+      and count("SELECT COUNT(*) FROM assets WHERE location='Lab 9' AND ip_address IS NULL") == 1)
 check("No two PCs share an IP inside a place", "all places", "0 duplicates",
       count("SELECT COUNT(*) FROM (SELECT location, ip_address FROM assets WHERE ip_address IS NOT NULL "
             "GROUP BY location, ip_address HAVING COUNT(*) > 1)") == 0)
@@ -593,6 +597,37 @@ check("Operational asset shows dashes", "GET /assets/OPS-1", "a row of '-' in ev
       "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in client.get("/assets/OPS-1").get_data(as_text=True))
 check("Operational asset has no current fault in the database", "OPS-1", "all fault fields NULL",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='OPS-1' AND status_category IS NULL AND status_date IS NULL") == 1)
+
+# 17. Status sorting, Not Assigned IPs, and the Log form rules
+STATUS_CLASS = {"Operational": "Operational", "Under Repair": "Under-Repair", "Faulty": "Faulty"}
+for first in ["Operational", "Under Repair", "Faulty"]:
+    html = client.get("/assets?sort=status&first=" + first.replace(" ", "+")).get_data(as_text=True)
+    expect = [r[0] for r in count_rows(
+        "SELECT asset_id FROM assets WHERE active=1 ORDER BY CASE WHEN status='" + first + "' THEN 0 ELSE 1 END, status, asset_id")]
+    check(f"Status sort: {first} first", f"sort=status, first={first}", "that status first, rest alphabetical by status",
+          ids_in(html) == expect)
+    check(f"Status arrow colour: {first}", f"sort=status, first={first}", f"arrow st-{STATUS_CLASS[first]}",
+          f'arrow st-{STATUS_CLASS[first]}' in html)
+html = client.get("/assets?sort=status&first=Operational").get_data(as_text=True)
+check("Status heading cycles to Under Repair next", "heading link while first=Operational",
+      "link asks for first=Under Repair", re.search(r'sort=status&amp;first=Under|first=Under', html) is not None)
+client.post("/assets/new", data={**GOOD, "asset_id": "RULE-1", "status": "Operational"})
+rules_before = count("SELECT COUNT(*) FROM maintenance WHERE asset_id='RULE-1'")
+client.post("/assets/RULE-1/maintenance", data={"event_date": "2026-03-02", "fault_category": "RAM fault",
+            "fault_description": "Checked", "action_taken": "", "technician": "Ali", "cost": "5", "set_status": "Operational"})
+check("Operational event needs the action", "Operational, action blank", "rejected",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='RULE-1'") == rules_before)
+client.post("/assets/RULE-1/maintenance", data={"event_date": "2026-03-02", "fault_category": "RAM fault",
+            "fault_description": "Checked", "action_taken": "Reseated", "technician": "Ali", "cost": "", "set_status": "Operational"})
+check("Operational event: cost may be left empty", "Operational, cost blank", "saved with cost 0",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='RULE-1' AND cost_usd=0") == rules_before + 1)
+detail = client.get("/assets/RULE-1").get_data(as_text=True)
+check("Log form status is required with a choose option", "GET /assets/RULE-1",
+      "'-- choose --' option first in the status drop-down",
+      '<select name="set_status" id="ev-status">\n    <option value="">— choose —</option>' in detail
+      or '<option value="">— choose —</option>\n    <option>Operational</option>' in detail)
+check("Not Assigned shown for a blank IP", "GET /assets/RULE-1", "Not Assigned in the hardware card",
+      "<dd>Not Assigned</dd>" in detail)
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

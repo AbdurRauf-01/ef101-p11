@@ -8,6 +8,7 @@
 <form class="filters" method="get">
   <input type="hidden" name="sort" value="{{ sort }}">
   <input type="hidden" name="dir" value="{{ direction }}">
+  <input type="hidden" name="first" value="{{ first }}">
   <div><label>Search (ID, model, CPU, IP)</label><input name="q" value="{{ f.get('q','') }}"></div>
   <div><label>CPU family</label><select name="cpu_family"><option value="">All</option>
     {% for o in opts.cpu_family %}<option {{ 'selected' if f.get('cpu_family')==o }}>{{ o }}</option>{% endfor %}</select></div>
@@ -30,7 +31,7 @@
     <option value="all" {{ 'selected' if f.get('show')=='all' }}>All</option></select></div>
   <div class="row"><button class="btn" type="submit">Apply</button>
     <a class="btn sec" href="{{ url_for('assets') }}">Reset</a>
-    <a class="btn sec" href="{{ url_for('export_assets', **dict(f, sort=sort, dir=direction)) }}">Export CSV</a></div>
+    <a class="btn sec" href="{{ url_for('export_assets', **dict(f, sort=sort, dir=direction, first=first)) }}">Export CSV</a></div>
 </form>
 </div>
 
@@ -39,7 +40,9 @@
 <tr>
   {% for key, label in columns %}
   <th><a class="sortlink" href="{{ sort_link(key) }}">
-    {% if key == sort %}<span class="arrow">{{ '▲' if direction == 'asc' else '▼' }}</span>{% else %}<span class="arrow faint">↕</span>{% endif %}
+    {% if key == 'status' and sort == 'status' %}<span class="arrow st-{{ first|replace(' ', '-') }}">▲</span>
+    {% elif key == sort %}<span class="arrow">{{ '▲' if direction == 'asc' else '▼' }}</span>
+    {% else %}<span class="arrow faint">↕</span>{% endif %}
     {{ label }}</a></th>
   {% endfor %}
 </tr>

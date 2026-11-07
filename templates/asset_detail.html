@@ -28,7 +28,7 @@
   <dt>GPU</dt><dd>{{ a.gpu or 'Integrated only' }}</dd>
   <dt>GPU VRAM</dt><dd>{% if a.gpu_vram_gb %}{{ a.gpu_vram_gb }} GB{% else %}N/A (integrated){% endif %}</dd>
   <dt>Operating system</dt><dd>{{ a.os }}</dd>
-  <dt>IP address</dt><dd>{{ a.ip_address or '-' }}</dd>
+  <dt>IP address</dt><dd>{{ a.ip_address or 'Not Assigned' }}</dd>
   <dt>Location</dt><dd>{{ a.location }}</dd>
 </dl></div>
 <div class="card"><h2>Status &amp; warranty</h2>
@@ -65,20 +65,36 @@
 </table></div>
 
 <div class="card" id="log-card"><h2>Log a fault / maintenance event</h2>
-{% if resolve %}<div class="flash success">Fixing this fault: the current fault details are filled in below. Complete the fields, choose Operational, then log the event.</div>{% endif %}
 <form method="post" action="{{ url_for('maintenance_add', asset_id=a.asset_id) }}" novalidate>
 <div class="formgrid">
   <div><label>Date *</label><input type="date" name="event_date" value="{{ today }}"></div>
-  <div><label>Fault category *</label><select name="fault_category"><option value="">— choose —</option>
+  <div><label id="lbl-cat">Fault category</label><select name="fault_category"><option value="">— choose —</option>
     {% for o in fault_categories %}<option{{ ' selected' if pref and pref.status_category==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Fault description *</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}"></div>
-  <div><label>Action taken *</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}"></div>
-  <div><label>Technician *</label><input name="technician" value="{{ pref.status_technician if pref else '' }}"></div>
+  <div><label id="lbl-desc">Fault description</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}"></div>
+  <div><label id="lbl-act">Action taken</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}"></div>
+  <div><label id="lbl-tech">Technician</label><input name="technician" value="{{ pref.status_technician if pref else '' }}"></div>
   <div><label>Cost ($)</label><input name="cost" value="0"></div>
-  <div><label>Update asset status to</label><select name="set_status"><option value="">(no change)</option>
-    <option{{ ' selected' if resolve }}>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
+  <div><label>Update asset status to *</label><select name="set_status" id="ev-status">
+    <option value="">— choose —</option>
+    <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
 </div>
 <p><button class="btn" type="submit">Log event</button></p>
 </form></div>
-{% if resolve %}<script>document.getElementById('log-card').scrollIntoView();</script>{% endif %}
+<script>
+// Required fields follow the chosen status. Faulty: all optional. Under Repair: technician required.
+// Operational: everything except the cost is required (the fault category may not be Unknown).
+(function () {
+  var st = document.getElementById('ev-status');
+  function mark(id, text, req) { document.getElementById(id).textContent = text + (req ? ' *' : ''); }
+  function sync() {
+    var s = st.value, fix = s === 'Operational', repair = s === 'Under Repair', progress = s === 'Faulty' || repair;
+    mark('lbl-cat', 'Fault category', fix);
+    mark('lbl-desc', 'Fault description', fix);
+    mark('lbl-act', progress ? 'Action to be taken' : 'Action taken', fix);
+    mark('lbl-tech', 'Technician', fix || repair);
+  }
+  st.addEventListener('change', sync);
+  sync();
+})();
+</script>
 {% endblock %}

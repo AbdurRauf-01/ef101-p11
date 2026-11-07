@@ -28,7 +28,7 @@
   <div><label>GPU (blank = integrated)</label><input name="gpu" value="{{ a.get('gpu','') or '' }}" placeholder="NVIDIA RTX 3060"></div>
   <div><label>GPU VRAM (GB), if a GPU is listed</label><input name="gpu_vram_gb" value="{{ a.get('gpu_vram_gb','') or '' }}" placeholder="12"></div>
   <div><label>Operating system *</label><input name="os" value="{{ a.get('os','') }}"></div>
-  <div><label>IP address (blank = automatic)</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="auto, e.g. 192.168.1.4"></div>
+  <div><label>IP address (blank = Not Assigned)</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="Not Assigned, e.g. 192.168.1.4"></div>
   <div><label>Purchase date * (YYYY-MM-DD)</label><input type="date" name="purchase_date" value="{{ a.get('purchase_date','') }}"></div>
   <div><label>Warranty expiry * (YYYY-MM-DD)</label><input type="date" name="warranty_expiry" value="{{ a.get('warranty_expiry','') }}"></div>
   <div><label>Operational status</label><select name="status" id="status-select">
@@ -36,20 +36,16 @@
 </div>
 
 <div id="fault-box" class="fault-box">
-  <h3>Current fault</h3>
-  <p class="muted" style="margin:0 0 10px">Shown when the status is Faulty or Under Repair. All fields are optional:
+  <h3 id="fx-title">Current fault</h3>
+  <p class="muted" id="fx-help" style="margin:0 0 10px">Shown when the status is Faulty or Under Repair. All fields are optional:
     a blank fault category is saved as Unknown, and the fault is added to the asset's fault history.</p>
   <div class="formgrid">
-    <div><label>Fault category</label><select name="status_category">
+    <div><label id="fx-cat">Fault category</label><select name="status_category">
       {% for o in fault_categories %}<option{{ ' selected' if (a.get('status_category') or 'Unknown')==o }}>{{ o }}</option>{% endfor %}</select></div>
-    <div><label>Fault description</label><input name="status_detail" value="{{ a.get('status_detail','') or '' }}" placeholder="What is wrong?"></div>
-    <div><label>Actions to be taken</label><input name="status_action" value="{{ a.get('status_action','') or '' }}" placeholder="Planned fix (optional)"></div>
-    <div><label>Technician</label><input name="status_technician" value="{{ a.get('status_technician','') or '' }}" placeholder="Leave blank if not assigned yet"></div>
+    <div><label id="fx-desc">Fault description</label><input name="status_detail" value="{{ a.get('status_detail','') or '' }}" placeholder="What is wrong?"></div>
+    <div><label id="fx-act">Actions to be taken</label><input name="status_action" value="{{ a.get('status_action','') or '' }}" placeholder="Planned fix"></div>
+    <div><label id="fx-tech">Technician</label><input name="status_technician" value="{{ a.get('status_technician','') or '' }}" placeholder="Leave blank if not assigned yet"></div>
   </div>
-</div>
-<div id="resolve-note" class="flash success" style="display:none">
-  This asset is currently {{ current_status }}. Saving with Operational keeps the fault open: the fault details move to
-  "Log a fault / maintenance event" on the asset page, where the fix is recorded.
 </div>
 
 <p class="row" style="margin-top:16px"><button class="btn" type="submit">Save</button>
@@ -67,14 +63,28 @@
   inp.addEventListener('blur', function () { if (!inp.value.trim()) toList(); });
   inp.addEventListener('keydown', function (e) { if (e.key === 'Escape') toList(); });
 })();
-// The current-fault box follows the status; the resolve note appears when a faulty asset is set Operational.
+// The fault box follows the status. Moving a Faulty / Under Repair asset to Operational closes the fault:
+// then every fault field is required, and the server refuses to save without them.
 (function () {
   var st = document.getElementById('status-select'), box = document.getElementById('fault-box');
-  var note = document.getElementById('resolve-note'), was = "{{ current_status or '' }}";
+  var title = document.getElementById('fx-title'), help = document.getElementById('fx-help');
+  var was = "{{ current_status or '' }}";
+  var fields = [['fx-cat', 'Fault category'], ['fx-desc', 'Fault description'],
+                ['fx-act', 'Actions to be taken'], ['fx-tech', 'Technician']];
+  function mark(id, text, req) {
+    document.getElementById(id).textContent = text + (req ? ' *' : '');
+  }
   function sync() {
     var s = st.value;
-    box.style.display = (s === 'Operational') ? 'none' : '';
-    note.style.display = (was && was !== 'Operational' && s === 'Operational') ? '' : 'none';
+    var closing = !!was && was !== 'Operational' && s === 'Operational';
+    box.style.display = (s !== 'Operational' || closing) ? '' : 'none';
+    title.textContent = closing ? 'Closing the fault: every field is required' : 'Current fault';
+    help.style.display = closing ? 'none' : '';
+    fields.forEach(function (f) {
+      var text = f[1];
+      if (closing && f[0] === 'fx-act') text = 'Action taken';
+      mark(f[0], text, closing);
+    });
   }
   st.addEventListener('change', sync);
   sync();
