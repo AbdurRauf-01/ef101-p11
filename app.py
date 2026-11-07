@@ -142,11 +142,11 @@ def parse_cost(text):
 
 
 def fault_box(form):
-    """The Current fault box on the Edit / Add form, as typed, plus its date and cost."""
+    """The Current fault box on the Edit / Add form, as typed. Updated Cost is the fault's current total."""
     box = {k: (form.get(k) or "").strip() for k in
-           ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "fault_increase"]}
+           ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "fault_cost"]}
     box["date"] = parse_date(box["fault_date"])
-    box["cost"], box["cost_error"] = parse_cost(box["fault_increase"])     # the increase, added now
+    box["cost"], box["cost_error"] = parse_cost(box["fault_cost"])
     return box
 
 
@@ -165,13 +165,12 @@ def box_problems(box, closing):
     return problems
 
 
-def first_step(box, was_open, prev_action):
-    """The step to save for a submit, or None when nothing is new: a changed action, or a cost."""
-    changed = bool(box["status_action"]) and box["status_action"] != (prev_action or "")
-    if not changed and box["cost"] <= 0:
+def first_step(box, prev_action):
+    """The step for this save: a new action (with its date and technician). None when the action did not change."""
+    if not box["status_action"] or box["status_action"] == (prev_action or ""):
         return None
-    return {"step_date": box["date"].isoformat(), "action": box["status_action"] if changed else "",
-            "technician": box["status_technician"], "cost": box["cost"]}
+    return {"step_date": box["date"].isoformat(), "action": box["status_action"],
+            "technician": box["status_technician"]}
 
 
 def validate_asset(f, is_new, subnet, prev=None):
@@ -291,9 +290,10 @@ def asset_new():
                 flash(e, "danger")
             return render_template("asset_form.html", a=form, new=True, current_status=None)
         step = None
+        c["status_cost"] = box["cost"] if opens else None
         if opens:
             c["status_date"] = box["date"].isoformat()
-            step = first_step(box, was_open=False, prev_action=None)
+            step = first_step(box, prev_action=None)
         try:
             if is_new_loc:
                 queries.add_location(name, existing_or_new_prefix(name, True), subnet)
@@ -317,8 +317,7 @@ def asset_detail(asset_id):
     total_cost = sum(e["cost_usd"] for e in events)
     return render_template("asset_detail.html", a=a, events=events, total_cost=total_cost,
                            warranty=warranty_status(a["warranty_expiry"]), today=today(),
-                           steps=queries.get_steps(asset_id),
-                           open_total=queries.open_fault_cost(asset_id) if a["status"] in CURRENT_ERROR_STATUSES else 0)
+                           steps=queries.get_steps(asset_id))
 
 
 @app.route("/assets/<asset_id>/edit", methods=["GET", "POST"])
@@ -327,7 +326,6 @@ def asset_edit(asset_id):
     if not a:
         return render_template("message.html", title="Asset not found", text=asset_id), 404
     current_status = a["status"]
-    open_total = queries.open_fault_cost(asset_id) if current_status in CURRENT_ERROR_STATUSES else 0
     if request.method == "POST":
         form = dict(request.form)
         form["asset_id"] = asset_id                       # primary key is never changed
@@ -347,7 +345,7 @@ def asset_edit(asset_id):
         if errors:
             for e in errors:
                 flash(e, "danger")
-            return render_template("asset_form.html", a=form, new=False, current_status=current_status, open_total=open_total)
+            return render_template("asset_form.html", a=form, new=False, current_status=current_status)
         if is_new_loc:
             queries.add_location(name, existing_or_new_prefix(name, True), subnet)
         if closing:
@@ -359,16 +357,17 @@ def asset_edit(asset_id):
             return redirect(url_for("asset_detail", asset_id=asset_id))
         step = None
         if c["status"] in CURRENT_ERROR_STATUSES:
+            c["status_cost"] = box["cost"]                 # Updated Cost replaces the fault's total
             if not was_open:
                 c["status_date"] = box["date"].isoformat()     # the fault starts on this date
-            step = first_step(box, was_open=was_open, prev_action=a["status_action"] if was_open else None)
+            step = first_step(box, prev_action=a["status_action"] if was_open else None)
         queries.update_asset(asset_id, c, step=step)
         flash("Asset updated.", "success")
         return redirect(url_for("asset_detail", asset_id=asset_id))
     # the form template uses a.get(...), which a sqlite3.Row does not have: convert to a
     # dict and show empty (NULL) fields as blank instead of the text "None"
     a = {k: ("" if v is None else v) for k, v in dict(a).items()}
-    return render_template("asset_form.html", a=a, new=False, current_status=current_status, open_total=open_total)
+    return render_template("asset_form.html", a=a, new=False, current_status=current_status)
 
 
 @app.route("/assets/<asset_id>/retire", methods=["POST"])
@@ -391,7 +390,7 @@ def maintenance_add(asset_id):
     if not asset:
         return render_template("message.html", title="Asset not found", text=asset_id), 404
     f = {k: (request.form.get(k) or "").strip() for k in
-         ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost", "increase_cost"]}
+         ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost"]}
     new_status = request.form.get("set_status")
     errors = []
     d = parse_date(f["event_date"])
@@ -403,11 +402,9 @@ def maintenance_add(asset_id):
         errors.append("Choose the status the asset will have: Operational, Faulty or Under Repair.")
     if f["fault_category"] and f["fault_category"] not in FAULT_CATEGORIES:
         errors.append("Choose a fault category from the list.")
-    base, base_error = parse_cost(f["cost"])              # Original Cost: typed for an Operational PC
-    increase, increase_error = parse_cost(f["increase_cost"])
-    for problem in (base_error, increase_error):
-        if problem:
-            errors.append(problem)
+    cost, cost_error = parse_cost(f["cost"])              # Updated Cost: the fault's current total
+    if cost_error:
+        errors.append(cost_error)
     if new_status == "Operational":
         errors += fix_problems(f["fault_category"], f["fault_description"], f["action_taken"], f["technician"])
     elif new_status == "Under Repair" and not f["technician"]:
@@ -419,15 +416,13 @@ def maintenance_add(asset_id):
             flash(e, "danger")
         return redirect(url_for("asset_detail", asset_id=asset_id))
     was_open = asset["status"] in CURRENT_ERROR_STATUSES
-    # cost added by this event: an open fault already holds its steps (Original Cost is ignored);
-    # an Operational PC's Original Cost is part of what is added now
-    added = increase if was_open else increase + base
     current = None
     if new_status in CURRENT_ERROR_STATUSES:
+        # the fault on the Log form becomes the asset's current fault; the date is kept while it stays open
         current = {"category": f["fault_category"], "detail": f["fault_description"],
                    "action": f["action_taken"], "technician": f["technician"],
                    "date": asset["status_date"] if (was_open and asset["status_date"]) else f["event_date"]}
-    queries.log_event(asset_id, f, added, new_status, current)
+    queries.log_event(asset_id, f, cost, new_status, current)
     if new_status == "Operational" and was_open:
         flash("Fault closed. The asset is Operational and the fault is recorded in the history as one entry.", "success")
     elif new_status == "Operational":
@@ -435,6 +430,67 @@ def maintenance_add(asset_id):
     else:
         flash("Saved. The fault stays open; it goes into the history when the PC is Operational again.", "success")
     return redirect(url_for("asset_detail", asset_id=asset_id))
+
+
+# ---- Editing history entries and steps (for corrections) -------------------------
+EVENT_FIELDS_FORM = ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost"]
+
+
+@app.route("/assets/<asset_id>/history/<int:event_id>/edit", methods=["GET", "POST"])
+def history_edit(asset_id, event_id):
+    e = queries.get_event(event_id)
+    if not e or e["asset_id"] != asset_id:
+        return render_template("message.html", title="Entry not found", text="That history entry does not exist."), 404
+    if request.method == "POST":
+        f = {k: (request.form.get(k) or "").strip() for k in EVENT_FIELDS_FORM}
+        errors = []
+        d = parse_date(f["event_date"])
+        if not d:
+            errors.append("Date must be a valid date (YYYY-MM-DD).")
+        elif d > date.today():
+            errors.append("Date cannot be in the future.")
+        if f["fault_category"] not in FAULT_CATEGORIES or f["fault_category"] == "Unknown":
+            errors.append("Choose a fault category (not Unknown).")
+        for label, key in [("Fault description", "fault_description"), ("Action taken", "action_taken"),
+                           ("Technician", "technician")]:
+            if not f[key]:
+                errors.append(f"{label} is required.")
+        cost, cost_error = parse_cost(f["cost"])
+        if cost_error:
+            errors.append(cost_error)
+        if errors:
+            for msg in errors:
+                flash(msg, "danger")
+            return render_template("history_edit.html", a=f, asset_id=asset_id, event_id=event_id)
+        queries.update_history_entry(event_id, dict(f, cost=cost))
+        flash("History entry corrected.", "success")
+        return redirect(url_for("asset_detail", asset_id=asset_id))
+    return render_template("history_edit.html", a=dict(e), asset_id=asset_id, event_id=event_id)
+
+
+@app.route("/assets/<asset_id>/steps/<int:step_id>/edit", methods=["GET", "POST"])
+def step_edit(asset_id, step_id):
+    st = queries.get_step(step_id)
+    if not st or st["asset_id"] != asset_id:
+        return render_template("message.html", title="Step not found", text="That step does not exist."), 404
+    if request.method == "POST":
+        f = {k: (request.form.get(k) or "").strip() for k in ["step_date", "action", "technician"]}
+        errors = []
+        d = parse_date(f["step_date"])
+        if not d:
+            errors.append("Date must be a valid date (YYYY-MM-DD).")
+        elif d > date.today():
+            errors.append("Date cannot be in the future.")
+        if not f["action"]:
+            errors.append("Action is required.")
+        if errors:
+            for msg in errors:
+                flash(msg, "danger")
+            return render_template("step_edit.html", a=f, asset_id=asset_id, step_id=step_id)
+        queries.update_step(step_id, f)
+        flash("Step corrected.", "success")
+        return redirect(url_for("asset_detail", asset_id=asset_id))
+    return render_template("step_edit.html", a=dict(st), asset_id=asset_id, step_id=step_id)
 
 
 # ---- Dashboard ----------------------------------------------------------------

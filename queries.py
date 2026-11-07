@@ -23,8 +23,9 @@ WARRANTY_SOON_DAYS = 30
 FIELDS = ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "ram_gb", "ram_type",
           "storage_type", "storage_gb", "gpu", "gpu_vram_gb", "os", "ip_address", "location",
           "purchase_date", "warranty_expiry", "status", "status_category", "status_detail",
-          "status_action", "status_technician", "status_date"]
-CURRENT_FAULT_FIELDS = ["status_category", "status_detail", "status_action", "status_technician", "status_date"]
+          "status_action", "status_technician", "status_date", "status_cost"]
+CURRENT_FAULT_FIELDS = ["status_category", "status_detail", "status_action", "status_technician", "status_date",
+                        "status_cost"]
 
 # Asset list sorting: column key from the URL -> SQL expression. Anything else is ignored.
 SORT_COLUMNS = {
@@ -154,34 +155,27 @@ def filter_options():
 
 
 # ---- Assets: write ----------------------------------------------------------
-def _add_step(db, asset_id, step_date, action, technician, cost):
-    """One step of an open fault. Not history: it is combined into the history entry when the fault closes."""
-    db.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician,cost_usd) VALUES (?,?,?,?,?)",
-               (asset_id, step_date, action or "", technician or "", float(cost or 0)))
+def _add_step(db, asset_id, step_date, action, technician):
+    """One step of an open fault (what was done, when, by whom). Not history until the fault closes."""
+    db.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician) VALUES (?,?,?,?)",
+               (asset_id, step_date, action or "", technician or ""))
 
 
 def _close_fault(db, asset_id, ev):
-    """Closing a fault writes ONE history entry. Its Action taken lists every step (date: action) and the
-    final action; its cost is the total of all steps plus the final cost. The steps are then removed.
-    ev = event_date, fault_category, fault_description, action, technician, cost (all validated by the app)."""
-    steps = db.execute("SELECT step_date, action, cost_usd FROM fault_steps WHERE asset_id=? ORDER BY id",
+    """Closing a fault writes ONE history entry: its Action taken lists every step (date: action) and the final
+    action; its cost is the Updated Cost entered at closing (the fault's current total). Steps are then removed.
+    ev = event_date, fault_category, fault_description, action, technician, cost."""
+    steps = db.execute("SELECT step_date, action FROM fault_steps WHERE asset_id=? ORDER BY id",
                        (asset_id,)).fetchall()
     parts = [f"{s['step_date']}: {s['action']}" for s in steps if s["action"]]
     final = (ev.get("action") or "").strip()
     if final and not (steps and steps[-1]["action"] == final):
         parts.append(f"{ev['event_date']}: {final}")
-    cost = sum(s["cost_usd"] for s in steps) + float(ev.get("cost") or 0)
     db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
                "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
                (asset_id, ev["event_date"], ev["fault_category"], ev["fault_description"],
-                "; ".join(parts) or final, ev["technician"], cost))
+                "; ".join(parts) or final, ev["technician"], float(ev.get("cost") or 0)))
     db.execute("DELETE FROM fault_steps WHERE asset_id=?", (asset_id,))
-
-
-def open_fault_cost(asset_id):
-    """Cost recorded so far for the open fault of this PC (the sum of its steps)."""
-    return get_db().execute("SELECT COALESCE(SUM(cost_usd),0) FROM fault_steps WHERE asset_id=?",
-                            (asset_id,)).fetchone()[0]
 
 
 def get_steps(asset_id):
@@ -246,30 +240,63 @@ def get_events(asset_id):
 
 
 def log_event(asset_id, f, cost, new_status, current=None):
-    """Log form. Operational = close the fault (one history entry, all steps combined).
-    Faulty / Under Repair = keep the fault open and record a step if there is new work or a cost.
+    """Log form. Operational = close the fault: one history entry whose cost is the Updated Cost.
+    Faulty / Under Repair = keep the fault open; the Updated Cost replaces the fault's current total,
+    and a step is recorded when the action changed.
     f = event_date, fault_category, fault_description, action_taken, technician (validated by the app)."""
     db = get_db()
     try:
         if new_status == "Operational":
             _close_fault(db, asset_id, dict(f, action=f["action_taken"], cost=cost))
             db.execute("UPDATE assets SET status='Operational', status_category=NULL, status_detail=NULL, "
-                       "status_action=NULL, status_technician=NULL, status_date=NULL WHERE asset_id=?", (asset_id,))
+                       "status_action=NULL, status_technician=NULL, status_date=NULL, status_cost=NULL "
+                       "WHERE asset_id=?", (asset_id,))
         else:
             prev = db.execute("SELECT status_action FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
             db.execute("UPDATE assets SET status=?, status_category=?, status_detail=?, status_action=?, "
-                       "status_technician=?, status_date=? WHERE asset_id=?",
+                       "status_technician=?, status_date=?, status_cost=? WHERE asset_id=?",
                        (new_status, current["category"], current["detail"], current["action"],
-                        current["technician"], current["date"], asset_id))
-            new_work = current["action"] and current["action"] != (prev["status_action"] or "")
-            if new_work or float(cost or 0) > 0:
-                _add_step(db, asset_id, f["event_date"], current["action"], current["technician"], cost)
+                        current["technician"], current["date"], float(cost or 0), asset_id))
+            if current["action"] and current["action"] != (prev["status_action"] or ""):
+                _add_step(db, asset_id, f["event_date"], current["action"], current["technician"])
         db.commit()
     except Exception:
         db.rollback()
         raise
     finally:
         db.close()
+
+
+def update_history_entry(event_id, f):
+    """Correct a history entry (wording, date, category, cost). Its id does not change."""
+    db = get_db()
+    try:
+        db.execute("UPDATE maintenance SET event_date=?, fault_category=?, fault_description=?, action_taken=?, "
+                   "technician=?, cost_usd=? WHERE id=?",
+                   (f["event_date"], f["fault_category"], f["fault_description"], f["action_taken"],
+                    f["technician"], float(f["cost"]), event_id))
+        db.commit()
+    finally:
+        db.close()
+
+
+def update_step(step_id, f):
+    """Correct a step of an open fault (wording, date, technician)."""
+    db = get_db()
+    try:
+        db.execute("UPDATE fault_steps SET step_date=?, action=?, technician=? WHERE id=?",
+                   (f["step_date"], f["action"], f["technician"], step_id))
+        db.commit()
+    finally:
+        db.close()
+
+
+def get_event(event_id):
+    return get_db().execute("SELECT * FROM maintenance WHERE id=?", (event_id,)).fetchone()
+
+
+def get_step(step_id):
+    return get_db().execute("SELECT * FROM fault_steps WHERE id=?", (step_id,)).fetchone()
 
 
 def all_events():

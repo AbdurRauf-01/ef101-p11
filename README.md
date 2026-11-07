@@ -13,7 +13,7 @@ The app prints its address (http://127.0.0.1:5000, or the next free port if 5000
 - **First launch:** an empty database is created with the six standard places. Add assets from the app.
 - **Demo data (optional):** `python seed.py` replaces the data with 40 demo assets. It asks you to type YES first when there is data.
 - **Several copies at once:** each copy has its own data file and its own address, so you can run an older version (for example v7) next to this one to compare.
-- **Tests:** `python test_app.py` runs 171 checks on a temporary database and prints a results table.
+- **Tests:** `python test_app.py` runs 177 checks on a temporary database and prints a results table.
 
 ## Files
 | File | Purpose |
@@ -28,10 +28,11 @@ The app prints its address (http://127.0.0.1:5000, or the next free port if 5000
 | `templates/`, `static/` | HTML (Jinja) pages and the stylesheet |
 
 ## Upgrading an existing database
-If you already have an `inventory.db` from an earlier version (version 8 or later), run `python migrate.py` once. It removes incomplete history entries (a blank or Unknown field), turns valid entries logged while a fault was open into its steps, and lists anything it could not resolve. It copies every row into the current structure, keeps a backup as `inventory.db.bak`, and reports any IP addresses it had to assign.
+If you already have an `inventory.db` from an earlier version (version 10 or later), run `python migrate.py` once. It adds each open fault's Updated Cost (the sum of its earlier step costs) and removes the cost from the steps. It removes incomplete history entries (a blank or Unknown field), turns valid entries logged while a fault was open into its steps, and lists anything it could not resolve. It copies every row into the current structure, keeps a backup as `inventory.db.bak`, and reports any IP addresses it had to assign.
 
 ## Rules to document in the report
-- **Cost**: *Original Cost* is what has been spent on an open fault so far (read-only; it is the sum of its steps). *Increase in Cost* is the new spend, which is added as a step. On a Log form for an Operational PC, *Original Cost* is the cost of the event. Closing the fault writes one history entry whose cost is the Original Cost plus the Increase.
+- **Updated Cost**: the single cost box on the Edit form and the Log form. It is the fault's current total: every save replaces it (it is not added to the previous value), so the person entering the data decides the current figure. Closing the fault writes one history entry whose cost is the Updated Cost entered at closing.
+- **Editing corrections**: history entries and steps can be edited (wording, date, category, cost for history). The current fault is edited from its section (Edit current fault), which opens the fault box on the edit page.
 - **IP addresses**: optional. A blank IP is shown as Not Assigned; nothing is assigned automatically. Two PCs in the same place can never share an IP (a PC's IP is checked against the others in its place); different places may share one.
 - **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately in the dashboard's Fault history, whatever the status.
 - **Current fault**: while a PC is Faulty or Under Repair, its fault (category, description, actions to be taken, technician, date) is shown in its Current fault section. Nothing is written to the history while the fault is open. Under Repair requires a technician. A blank category is saved as Unknown.

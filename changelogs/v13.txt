@@ -1,0 +1,15 @@
+What changed:
+
+1. Schema updated.
+- Each open fault now has one Updated Cost value, stored on the asset.
+- The cost column is removed from the per-step records.
+
+2. One Updated Cost box. Both boxes are merged into one on the Edit page and the Log form. The number entered is the fault’s current total, and each save replaces the previous one instead of adding to it. This fixes the stacking. Closing the fault records that total as the history cost.
+
+3. Editing mistakes.
+- The Maintenance history and the Current fault section are both editable.
+- History entries: each row has an Edit link. You can correct the wording, date, category, and cost. An entry can’t be changed to “Unknown”, and its required fields must stay filled in.
+- Steps: each step of an open fault has an Edit link for its date, action, and technician.
+- Current fault: an Edit current fault button opens the fault box on the Edit page.
+
+4. Log form. Both cost boxes are now Updated Cost. For an open fault, the box shows the current total, and the value you enter replaces it.

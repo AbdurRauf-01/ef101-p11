@@ -40,11 +40,14 @@ CREATE TABLE assets (
     status_action     TEXT,                             -- actions to be taken ('' = not decided)
     status_technician TEXT,                             -- technician ('' = not assigned yet)
     status_date       TEXT,                             -- date the fault was recorded (ISO)
+    status_cost       REAL,                             -- Updated Cost: the fault's current total in $ (replaced on each save)
     active            INTEGER NOT NULL DEFAULT 1,       -- 0 = retired (kept for history)
     CHECK ((status = 'Operational' AND status_category IS NULL AND status_detail IS NULL
-            AND status_action IS NULL AND status_technician IS NULL AND status_date IS NULL)
+            AND status_action IS NULL AND status_technician IS NULL AND status_date IS NULL
+            AND status_cost IS NULL)
         OR (status <> 'Operational' AND status_category IS NOT NULL AND status_detail IS NOT NULL
-            AND status_action IS NOT NULL AND status_technician IS NOT NULL AND status_date IS NOT NULL)),
+            AND status_action IS NOT NULL AND status_technician IS NOT NULL AND status_date IS NOT NULL
+            AND status_cost IS NOT NULL AND status_cost >= 0)),
     UNIQUE (location, ip_address)                       -- no two PCs in one place share an IP
 );
 
@@ -63,13 +66,13 @@ CREATE INDEX idx_maint_asset ON maintenance(asset_id);
 
 -- Steps of an open fault (Faulty / Under Repair). They are not history yet: when the PC is Operational
 -- again, all steps are combined into the Action taken of ONE maintenance entry and this table is emptied.
+-- The cost is not stored per step: assets.status_cost holds the fault's current Updated Cost.
 CREATE TABLE fault_steps (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id    TEXT NOT NULL REFERENCES assets(asset_id),
     step_date   TEXT NOT NULL,                        -- ISO date of the step
-    action      TEXT NOT NULL,                        -- what was done ('' = cost only)
-    technician  TEXT NOT NULL,                        -- who did it ('' = not recorded)
-    cost_usd    REAL NOT NULL DEFAULT 0 CHECK (cost_usd >= 0)
+    action      TEXT NOT NULL,                        -- what was done
+    technician  TEXT NOT NULL                         -- who did it ('' = not recorded)
 );
 
 CREATE INDEX idx_steps_asset ON fault_steps(asset_id);

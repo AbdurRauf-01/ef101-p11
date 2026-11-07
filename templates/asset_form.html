@@ -38,8 +38,9 @@
 <div id="fault-box" class="fault-box">
   <h3 id="fx-title">Current fault</h3>
   <p class="muted" id="fx-help" style="margin:0 0 10px">Shown while the PC is Faulty or Under Repair. Nothing goes into the
-    history yet: each save adds a step (its date, action and cost), and when the PC is Operational again the whole fault
-    is recorded as one history entry. A blank fault category is saved as Unknown.</p>
+    history yet: each save adds a step when the action changes, and the Updated Cost is the fault's current total (replaced
+    on every save, not added to). When the PC is Operational again the whole fault is recorded as one history entry.
+    A blank fault category is saved as Unknown.</p>
   <div class="formgrid">
     <div><label id="fx-cat">Fault category</label><select name="status_category">
       {% for o in fault_categories %}<option{{ ' selected' if (a.get('status_category') or 'Unknown')==o }}>{{ o }}</option>{% endfor %}</select></div>
@@ -47,8 +48,7 @@
     <div><label id="fx-act">Actions to be taken</label><input name="status_action" value="{{ a.get('status_action','') or '' }}" placeholder="Planned fix, or what was just done"></div>
     <div><label id="fx-tech">Technician</label><input name="status_technician" value="{{ a.get('status_technician','') or '' }}" placeholder="Required when Under Repair"></div>
     <div><label id="fx-date">Date</label><input type="date" name="fault_date" value="{{ a.get('fault_date') or today }}"></div>
-    <div><label title="Spent so far on this fault (the sum of its steps)">Original Cost ($)</label><input value="{{ open_total or 0 }}" readonly></div>
-    <div><label id="fx-cost">Increase in Cost ($)</label><input name="fault_increase" value="0"></div>
+    <div><label id="fx-cost">Updated Cost ($)</label><input name="fault_cost" value="{{ a.get('status_cost') or 0 }}"></div>
   </div>
 </div>
 

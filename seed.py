@@ -133,13 +133,14 @@ def main():
         # an open fault goes into the history only when it is closed; Under Repair always has a technician
         tech = (TECHS[int(a[0].split("-")[-1]) % len(TECHS)] if a[14] == "Under Repair" else "") if cur else None
         action, when = ("", TODAY.isoformat()) if cur else (None, None)
+        cost = 0.0 if cur else None            # Updated Cost of an open fault (none yet in the demo)
         rows.append([a[0], a[1], a[2], a[3], a[4], a[5], ram_type, a[6], a[7], a[8], vram, a[9], a[10],
-                     a[11], a[12], a[13], a[14], cat, detail, action, tech, when, a[15]])
+                     a[11], a[12], a[13], a[14], cat, detail, action, tech, when, cost, a[15]])
     conn.executemany(
         "INSERT INTO assets (asset_id,manufacturer,model,cpu,cpu_family,ram_gb,ram_type,storage_type,"
         "storage_gb,gpu,gpu_vram_gb,os,ip_address,location,purchase_date,warranty_expiry,status,status_category,"
-        "status_detail,status_action,status_technician,status_date,active) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        "status_detail,status_action,status_technician,status_date,status_cost,active) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     conn.executemany(
         "INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
         "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)", events)

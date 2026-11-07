@@ -41,23 +41,26 @@
 </dl></div>
 </div>
 
-<div class="card scroll"><h2>Current fault</h2>
+<div class="card scroll">
+<div class="row" style="justify-content:space-between"><h2>Current fault</h2>
+{% if a.status != 'Operational' %}<a class="btn sec sm" href="{{ url_for('asset_edit', asset_id=a.asset_id) }}#fault-box">Edit current fault</a>{% endif %}</div>
 <table>
-<tr><th>Date</th><th>Category</th><th>Fault</th><th>Actions to be taken</th><th>Technician</th></tr>
+<tr><th>Date</th><th>Category</th><th>Fault</th><th>Actions to be taken</th><th>Technician</th><th class="right">Updated Cost</th></tr>
 {% if a.status == 'Operational' %}
-<tr><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="right">-</td></tr>
 {% else %}
 <tr><td>{{ a.status_date }}</td><td>{{ a.status_category }}</td>
 <td>{{ a.status_detail or 'Not recorded' }}</td><td>{{ a.status_action or 'Not recorded' }}</td>
-<td>{{ a.status_technician or 'Not recorded' }}</td></tr>
+<td>{{ a.status_technician or 'Not recorded' }}</td><td class="right">{{ a.status_cost|money }}</td></tr>
 {% endif %}
 </table>
 {% if a.status != 'Operational' %}
 <h3 style="margin:14px 0 6px;font-size:.95rem">Steps so far <span class="muted">(recorded in the history when the PC is Operational again)</span></h3>
 <table>
-<tr><th>Date</th><th>Action</th><th>Technician</th><th class="right">Cost</th></tr>
+<tr><th>Date</th><th>Action</th><th>Technician</th><th></th></tr>
 {% for s in steps %}
-<tr><td>{{ s.step_date }}</td><td>{{ s.action or 'Cost only' }}</td><td>{{ s.technician or 'Not recorded' }}</td><td class="right">{{ s.cost_usd|money }}</td></tr>
+<tr><td>{{ s.step_date }}</td><td>{{ s.action }}</td><td>{{ s.technician or 'Not recorded' }}</td>
+<td><a href="{{ url_for('step_edit', asset_id=a.asset_id, step_id=s.id) }}">Edit</a></td></tr>
 {% else %}
 <tr><td colspan="4" class="muted">No steps yet.</td></tr>
 {% endfor %}
@@ -67,12 +70,13 @@
 
 <div class="card scroll"><h2>Maintenance history</h2>
 <table>
-<tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
+<tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th><th></th></tr>
 {% for e in events %}
 <tr><td>{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description or 'Not recorded' }}</td>
-<td>{{ e.action_taken or 'Not recorded' }}</td><td>{{ e.technician or 'Not recorded' }}</td><td class="right">{{ e.cost_usd|money }}</td></tr>
+<td>{{ e.action_taken or 'Not recorded' }}</td><td>{{ e.technician or 'Not recorded' }}</td><td class="right">{{ e.cost_usd|money }}</td>
+<td><a href="{{ url_for('history_edit', asset_id=a.asset_id, event_id=e.id) }}">Edit</a></td></tr>
 {% else %}
-<tr><td colspan="6" class="muted">No maintenance events recorded.</td></tr>
+<tr><td colspan="7" class="muted">No maintenance events recorded.</td></tr>
 {% endfor %}
 </table></div>
 
@@ -85,10 +89,8 @@
   <div><label id="lbl-desc">Fault description</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}"></div>
   <div><label id="lbl-act">Action taken</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}"></div>
   <div><label id="lbl-tech">Technician</label><input name="technician" value="{{ pref.status_technician if pref else '' }}"></div>
-  <div><label title="Spent so far on this fault (the sum of its steps)">Original Cost ($)</label>
-    {% if pref %}<input name="cost" value="{{ open_total }}" readonly>
-    {% else %}<input name="cost" value="0">{% endif %}</div>
-  <div><label>Increase in Cost ($)</label><input name="increase_cost" value="0"></div>
+  <div><label title="The fault's current total. Each save replaces the previous total; it is not added to it.">Updated Cost ($)</label>
+    <input name="cost" value="{{ '%.2f'|format(pref.status_cost) if pref else '0' }}"></div>
   <div><label>Update asset status to *</label><select name="set_status" id="ev-status">
     <option value="">— choose —</option>
     <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
