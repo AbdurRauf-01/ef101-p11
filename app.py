@@ -193,10 +193,9 @@ def parse_cost(text):
 def fault_box(form):
     """The Current fault box on the Edit / Add form, as typed, plus its date and cost."""
     box = {k: (form.get(k) or "").strip() for k in
-           ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "cost", "fault_increase"]}
+           ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "cost"]}
     box["date"] = parse_date(box["fault_date"])
-    cost_text = box["cost"] if box["cost"] != "" else box["fault_increase"]
-    box["cost"], box["cost_error"] = parse_cost(cost_text)     # single Updated Cost
+    box["cost"], box["cost_error"] = parse_cost(box["cost"])     # single Updated Cost
     return box
 
 
@@ -270,9 +269,8 @@ def validate_asset(f, is_new, subnet, prev=None):
             errors.append("Technician is required when the PC is Under Repair.")
         was_faulty = prev is not None and prev["status"] in CURRENT_ERROR_STATUSES
         c["status_date"] = prev["status_date"] if (was_faulty and prev["status_date"]) else today()
-        cost_val = f.get("cost") if f.get("cost") is not None and str(f.get("cost")).strip() != "" else f.get("fault_increase")
         try:
-            c["status_cost"] = float(cost_val or 0)
+            c["status_cost"] = float(f.get("cost") or 0)
             if c["status_cost"] < 0:
                 raise ValueError
         except ValueError:
@@ -587,7 +585,7 @@ def maintenance_add(asset_id):
     if not asset:
         return render_template("message.html", title="Asset not found", text=asset_id), 404
     f = {k: (request.form.get(k) or "").strip() for k in
-         ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost", "increase_cost"]}
+         ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost"]}
     new_status = request.form.get("set_status")
     errors = []
     d = parse_date(f["event_date"])
@@ -602,12 +600,7 @@ def maintenance_add(asset_id):
     cost_error = None
     was_open = asset["status"] in CURRENT_ERROR_STATUSES
     open_cost = queries.open_fault_cost(asset_id) if was_open else 0.0
-    inc, inc_err = parse_cost(f.get("increase_cost") or "0")
-    if inc_err:
-        cost_error = inc_err
-    if inc > 0:
-        updated_cost = open_cost + inc
-    elif f.get("cost") is not None and str(f.get("cost")).strip() != "":
+    if f.get("cost") is not None and str(f.get("cost")).strip() != "":
         updated_cost, cost_error = parse_cost(f["cost"])
     elif was_open and open_cost > 0:
         updated_cost = open_cost

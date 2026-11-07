@@ -330,13 +330,26 @@ table.aligned-table {
   border-collapse: collapse;
 }
 
-table.aligned-table col.col-date   { width: 11%; }
-table.aligned-table col.col-cat    { width: 14%; }
-table.aligned-table col.col-fault  { width: 23%; }
-table.aligned-table col.col-act    { width: 25%; }
-table.aligned-table col.col-tech   { width: 11%; }
-table.aligned-table col.col-cost   { width: 7%; }
-table.aligned-table col.col-action { width: 9%; }
+/* Fixed widths (px) for the date, technician, cost and action columns keep the Technician column in the same place
+   in all three tables; the category, fault and action-taken columns share the rest. */
+table.aligned-table col.col-date   { width: 100px; }
+table.aligned-table col.col-cat    { width: 13%; }
+table.aligned-table col.col-fault  { width: 25%; }
+table.aligned-table col.col-act    { width: auto; }
+table.aligned-table col.col-tech   { width: 108px; }
+table.aligned-table col.col-cost   { width: 88px; }
+table.aligned-table col.col-action { width: 112px; }
+
+table.aligned-table td:first-child { font-size: .8125rem; }   /* date */
+
+/* Edit / Delete in the Action column: compact, so both fit inside the card */
+table.aligned-table td.actions { padding: 6px 8px; white-space: nowrap; }
+table.aligned-table td.actions .btn.small {
+  padding: 3px 8px;
+  font-size: .75rem;
+  min-height: 24px;
+  border-radius: 5px;
+}
 
 table.aligned-table th,
 table.aligned-table td {

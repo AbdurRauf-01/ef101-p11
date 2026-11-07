@@ -1,0 +1,6 @@
+What changed:
+
+1. Cost input changes
+2. Layout changes
+3. Updated inventory.db
+4. Unused increase code removed

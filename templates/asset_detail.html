@@ -69,7 +69,7 @@
 <td>{{ a.status_detail or 'Not recorded' }}</td><td>{{ a.status_action or 'Not recorded' }}</td>
 <td>{{ a.status_technician or 'Not recorded' }}</td>
 <td class="right nw">{{ (a.status_cost or 0)|money }}</td>
-<td class="nw"><a class="btn sec small" href="{{ url_for('asset_fault_edit', asset_id=a.asset_id) }}">Edit</a></td></tr>
+<td class="nw actions"><a class="btn sec small" href="{{ url_for('asset_fault_edit', asset_id=a.asset_id) }}">Edit</a></td></tr>
 {% endif %}
 </tbody>
 </table>
@@ -91,7 +91,7 @@
 <tbody>
 {% for s in steps %}
 <tr><td class="nw">{{ s.step_date }}</td><td colspan="3">{{ s.action or 'Cost only' }}</td><td>{{ s.technician or 'Not recorded' }}</td><td class="right nw">{{ s.cost_usd|money }}</td>
-<td class="nw">
+<td class="nw actions">
   <a class="btn sec small" href="{{ url_for('step_edit', step_id=s.id) }}">Edit</a>
   <form method="post" action="{{ url_for('step_delete', step_id=s.id) }}" style="display:inline" onsubmit="return confirm('Remove this step?')">
     <button class="btn danger small" type="submit">Delete</button>
@@ -123,7 +123,7 @@
 {% for e in events %}
 <tr><td class="nw">{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description or 'Not recorded' }}</td>
 <td>{{ e.action_taken or 'Not recorded' }}</td><td>{{ e.technician or 'Not recorded' }}</td><td class="right nw">{{ e.cost_usd|money }}</td>
-<td class="nw">
+<td class="nw actions">
   <a class="btn sec small" href="{{ url_for('maintenance_event_edit', event_id=e.id) }}">Edit</a>
   <form method="post" action="{{ url_for('maintenance_event_delete', event_id=e.id) }}" style="display:inline" onsubmit="return confirm('Delete this maintenance record?')">
     <button class="btn danger small" type="submit">Delete</button>

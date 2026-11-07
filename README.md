@@ -13,7 +13,7 @@ The app prints its address (http://127.0.0.1:5000, or the next free port if 5000
 - **First launch:** an empty database is created with the six standard places. Add assets from the app.
 - **Demo data (optional):** `python seed.py` replaces the data with 40 demo assets. It asks you to type YES first when there is data.
 - **Several copies at once:** each copy has its own data file and its own address, so you can run an older version (for example v7) next to this one to compare.
-- **Tests:** `python test_app.py` runs 171 checks on a temporary database and prints a results table.
+- **Tests:** `python test_app.py` runs 177 checks on a temporary database and prints a results table.
 
 ## Files
 | File | Purpose |
