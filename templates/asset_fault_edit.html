@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Edit Current Fault - {{ a.asset_id }}{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>Edit Current Fault: {{ a.asset_id }}</h1>
+  <a class="btn sec" href="{{ url_for('asset_detail', asset_id=a.asset_id) }}">Back to Asset</a>
+</div>
+
+<div class="card">
+<p class="muted" style="margin-top:0">Update the current fault information, planned actions, technician, or current cost for this asset.</p>
+<form method="post" novalidate>
+<div class="formgrid">
+  <div><label>Fault Date * (YYYY-MM-DD)</label><input type="date" name="status_date" value="{{ a.get('status_date', '') }}"></div>
+  <div><label>Fault category</label><select name="status_category">
+    {% for o in fault_categories %}<option{{ ' selected' if (a.get('status_category') or 'Unknown')==o }}>{{ o }}</option>{% endfor %}
+  </select></div>
+  <div><label>Fault description</label><input name="status_detail" value="{{ a.get('status_detail', '') or '' }}" placeholder="What is wrong?"></div>
+  <div><label>Actions to be taken</label><input name="status_action" value="{{ a.get('status_action', '') or '' }}" placeholder="Planned fix, or what was just done"></div>
+  <div><label>Technician {{ '*' if a.status == 'Under Repair' else '' }}</label><input name="status_technician" value="{{ a.get('status_technician', '') or '' }}" placeholder="{{ 'Required when Under Repair' if a.status == 'Under Repair' else 'Technician name' }}"></div>
+  <div><label>Updated Cost ($)</label><input type="number" step="any" min="0" name="cost" value="{{ a.get('cost') or a.get('status_cost') or 0 }}" placeholder="0"></div>
+</div>
+<p class="row" style="margin-top:16px">
+  <button class="btn" type="submit">Save Changes</button>
+  <a class="btn sec" href="{{ url_for('asset_detail', asset_id=a.asset_id) }}">Cancel</a>
+</p>
+</form>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,12 +15,15 @@
     if (w >= 180 && w <= 420) root.style.setProperty('--sidebar-w', w + 'px');
   })();
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 {% set ep = request.endpoint or '' %}
 <div class="shell">
-  <aside class="sidebar">
+  <aside class="sidebar" aria-label="Site navigation">
     <div class="brand">Hardware Inventory</div>
     <nav aria-label="Main">
       <a class="top {{ 'on' if ep == 'dashboard' }}" href="{{ url_for('dashboard') }}">Dashboard</a>
@@ -46,9 +49,9 @@
   <div class="resizer" id="resizer" tabindex="0" role="separator" aria-orientation="vertical"
        aria-label="Resize sidebar" title="Drag to resize (arrow keys also work, Home resets)"></div>
   <div class="content">
-    <main>
+    <main id="main-content">
       {% with msgs = get_flashed_messages(with_categories=true) %}
-        {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+        {% for cat, m in msgs %}<div class="flash {{ cat }}" role="alert">{{ m }}</div>{% endfor %}
       {% endwith %}
       {% block content %}{% endblock %}
     </main>

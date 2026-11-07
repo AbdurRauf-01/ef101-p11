@@ -1,16 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Edit step{% endblock %}
+{% block title %}Edit Step #{{ s.id }}{% endblock %}
 {% block content %}
-<h1>Edit step · {{ asset_id }}</h1>
-<p class="muted">Correct the wording, date or technician of this step of the open fault.</p>
+<div class="row" style="justify-content:space-between">
+  <h1>Edit Step #{{ s.id }} ({{ s.asset_id }})</h1>
+  <a class="btn sec" href="{{ url_for('asset_detail', asset_id=s.asset_id) }}">Back to Asset</a>
+</div>
+
 <div class="card">
 <form method="post" novalidate>
 <div class="formgrid">
-  <div><label>Date *</label><input type="date" name="step_date" value="{{ a.get('step_date','') }}"></div>
-  <div><label>Action *</label><input name="action" value="{{ a.get('action','') or '' }}"></div>
-  <div><label>Technician</label><input name="technician" value="{{ a.get('technician','') or '' }}"></div>
+  <div><label>Step Date * (YYYY-MM-DD)</label><input type="date" name="step_date" value="{{ s.get('step_date', '') }}"></div>
+  <div><label>Action taken</label><input name="action" value="{{ s.get('action', '') }}" placeholder="Action description"></div>
+  <div><label>Technician</label><input name="technician" value="{{ s.get('technician', '') }}" placeholder="Technician name"></div>
+  <div><label>Cost ($)</label><input type="number" step="any" min="0" name="cost" value="{{ s.get('cost_usd', 0) }}"></div>
 </div>
-<p class="row" style="margin-top:16px"><button class="btn" type="submit">Save</button>
-<a class="btn sec" href="{{ url_for('asset_detail', asset_id=asset_id) }}">Cancel</a></p>
-</form></div>
+<p class="row" style="margin-top:16px">
+  <button class="btn" type="submit">Save Changes</button>
+  <a class="btn sec" href="{{ url_for('asset_detail', asset_id=s.asset_id) }}">Cancel</a>
+</p>
+</form>
+</div>
 {% endblock %}

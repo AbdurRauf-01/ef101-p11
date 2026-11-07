@@ -26,7 +26,7 @@
   <dt>RAM</dt><dd>{{ a.ram_gb }} GB {{ a.ram_type }}</dd>
   <dt>Storage</dt><dd>{{ a.storage_type }}, {{ a.storage_gb }} GB</dd>
   <dt>GPU</dt><dd>{{ a.gpu or 'Integrated only' }}</dd>
-  <dt>GPU VRAM</dt><dd>{% if a.gpu_vram_gb %}{{ a.gpu_vram_gb }} GB{% else %}N/A (integrated){% endif %}</dd>
+  {% if a.gpu and a.gpu_vram_gb %}<dt>GPU VRAM</dt><dd>{{ a.gpu_vram_gb }} GB</dd>{% endif %}
   <dt>Operating system</dt><dd>{{ a.os }}</dd>
   <dt>IP address</dt><dd>{{ a.ip_address or 'Not Assigned' }}</dd>
   <dt>Location</dt><dd>{{ a.location }}</dd>
@@ -42,42 +42,97 @@
 </div>
 
 <div class="card scroll">
-<div class="row" style="justify-content:space-between"><h2>Current fault</h2>
-{% if a.status != 'Operational' %}<a class="btn sec sm" href="{{ url_for('asset_edit', asset_id=a.asset_id) }}#fault-box">Edit current fault</a>{% endif %}</div>
-<table>
-<tr><th>Date</th><th>Category</th><th>Fault</th><th>Actions to be taken</th><th>Technician</th><th class="right">Updated Cost</th></tr>
+  <div class="row" style="justify-content:space-between">
+    <h2>Current fault</h2>
+    {% if a.status != 'Operational' %}
+    <a class="btn sec small" href="{{ url_for('asset_fault_edit', asset_id=a.asset_id) }}">Edit fault</a>
+    {% endif %}
+  </div>
+<table class="aligned-table">
+<colgroup>
+  <col class="col-date">
+  <col class="col-cat">
+  <col class="col-fault">
+  <col class="col-act">
+  <col class="col-tech">
+  <col class="col-cost">
+  <col class="col-action">
+</colgroup>
+<thead>
+<tr><th>Date</th><th>Category</th><th>Fault</th><th>Actions to be taken</th><th>Technician</th><th class="right">Cost</th><th>Action</th></tr>
+</thead>
+<tbody>
 {% if a.status == 'Operational' %}
-<tr><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="right">-</td></tr>
+<tr><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="right">-</td><td>-</td></tr>
 {% else %}
-<tr><td>{{ a.status_date }}</td><td>{{ a.status_category }}</td>
+<tr><td class="nw">{{ a.status_date }}</td><td>{{ a.status_category }}</td>
 <td>{{ a.status_detail or 'Not recorded' }}</td><td>{{ a.status_action or 'Not recorded' }}</td>
-<td>{{ a.status_technician or 'Not recorded' }}</td><td class="right">{{ a.status_cost|money }}</td></tr>
+<td>{{ a.status_technician or 'Not recorded' }}</td>
+<td class="right nw">{{ (a.status_cost or 0)|money }}</td>
+<td class="nw"><a class="btn sec small" href="{{ url_for('asset_fault_edit', asset_id=a.asset_id) }}">Edit</a></td></tr>
 {% endif %}
+</tbody>
 </table>
 {% if a.status != 'Operational' %}
 <h3 style="margin:14px 0 6px;font-size:.95rem">Steps so far <span class="muted">(recorded in the history when the PC is Operational again)</span></h3>
-<table>
-<tr><th>Date</th><th>Action</th><th>Technician</th><th></th></tr>
+<table class="aligned-table">
+<colgroup>
+  <col class="col-date">
+  <col class="col-cat">
+  <col class="col-fault">
+  <col class="col-act">
+  <col class="col-tech">
+  <col class="col-cost">
+  <col class="col-action">
+</colgroup>
+<thead>
+<tr><th>Date</th><th colspan="3">Action taken</th><th>Technician</th><th class="right">Cost</th><th>Action</th></tr>
+</thead>
+<tbody>
 {% for s in steps %}
-<tr><td>{{ s.step_date }}</td><td>{{ s.action }}</td><td>{{ s.technician or 'Not recorded' }}</td>
-<td><a href="{{ url_for('step_edit', asset_id=a.asset_id, step_id=s.id) }}">Edit</a></td></tr>
+<tr><td class="nw">{{ s.step_date }}</td><td colspan="3">{{ s.action or 'Cost only' }}</td><td>{{ s.technician or 'Not recorded' }}</td><td class="right nw">{{ s.cost_usd|money }}</td>
+<td class="nw">
+  <a class="btn sec small" href="{{ url_for('step_edit', step_id=s.id) }}">Edit</a>
+  <form method="post" action="{{ url_for('step_delete', step_id=s.id) }}" style="display:inline" onsubmit="return confirm('Remove this step?')">
+    <button class="btn danger small" type="submit">Delete</button>
+  </form>
+</td></tr>
 {% else %}
-<tr><td colspan="4" class="muted">No steps yet.</td></tr>
+<tr><td colspan="7" class="muted">No steps yet.</td></tr>
 {% endfor %}
+</tbody>
 </table>
 {% endif %}
 </div>
 
 <div class="card scroll"><h2>Maintenance history</h2>
-<table>
-<tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th><th></th></tr>
+<table class="aligned-table">
+<colgroup>
+  <col class="col-date">
+  <col class="col-cat">
+  <col class="col-fault">
+  <col class="col-act">
+  <col class="col-tech">
+  <col class="col-cost">
+  <col class="col-action">
+</colgroup>
+<thead>
+<tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th><th>Action</th></tr>
+</thead>
+<tbody>
 {% for e in events %}
-<tr><td>{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description or 'Not recorded' }}</td>
-<td>{{ e.action_taken or 'Not recorded' }}</td><td>{{ e.technician or 'Not recorded' }}</td><td class="right">{{ e.cost_usd|money }}</td>
-<td><a href="{{ url_for('history_edit', asset_id=a.asset_id, event_id=e.id) }}">Edit</a></td></tr>
+<tr><td class="nw">{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description or 'Not recorded' }}</td>
+<td>{{ e.action_taken or 'Not recorded' }}</td><td>{{ e.technician or 'Not recorded' }}</td><td class="right nw">{{ e.cost_usd|money }}</td>
+<td class="nw">
+  <a class="btn sec small" href="{{ url_for('maintenance_event_edit', event_id=e.id) }}">Edit</a>
+  <form method="post" action="{{ url_for('maintenance_event_delete', event_id=e.id) }}" style="display:inline" onsubmit="return confirm('Delete this maintenance record?')">
+    <button class="btn danger small" type="submit">Delete</button>
+  </form>
+</td></tr>
 {% else %}
 <tr><td colspan="7" class="muted">No maintenance events recorded.</td></tr>
 {% endfor %}
+</tbody>
 </table></div>
 
 <div class="card" id="log-card"><h2>Log a fault / maintenance event</h2>
@@ -89,8 +144,8 @@
   <div><label id="lbl-desc">Fault description</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}"></div>
   <div><label id="lbl-act">Action taken</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}"></div>
   <div><label id="lbl-tech">Technician</label><input name="technician" value="{{ pref.status_technician if pref else '' }}"></div>
-  <div><label title="The fault's current total. Each save replaces the previous total; it is not added to it.">Updated Cost ($)</label>
-    <input name="cost" value="{{ '%.2f'|format(pref.status_cost) if pref else '0' }}"></div>
+  <div><label>Updated Cost ($)</label>
+    <input type="number" step="any" min="0" name="cost" value="{{ ((a.status_cost if a.status_cost is not none else open_total) or 0) }}" placeholder="0"></div>
   <div><label>Update asset status to *</label><select name="set_status" id="ev-status">
     <option value="">— choose —</option>
     <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>

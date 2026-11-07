@@ -123,7 +123,7 @@
 <text x="890" y="718" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">style.css: all styling, no libraries</text>
 <rect x="724" y="734" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="752" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">test_app.py</text>
-<text x="890" y="752" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">177 automated checks on a temporary database</text>
+<text x="890" y="752" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">171 automated checks on a temporary database</text>
 <rect x="724" y="768" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="786" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">README.md</text>
 <text x="890" y="786" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">how to run, rules, tool and AI disclosure</text>

@@ -2,23 +2,45 @@
 {% block title %}Fault History{% endblock %}
 {% block content %}
 <div class="row" style="justify-content:space-between">
-  <h1>Fault History</h1>
+  <h1>Fault History ({{ events|length }})</h1>
   <a class="btn sec" href="{{ url_for('export_maintenance') }}">Export maintenance CSV</a>
 </div>
-<p class="muted">{{ events|length }} fault events across all assets, whatever each asset's current status.
-Total cost {{ total_cost|money }}.</p>
+<p class="muted">{{ events|length }} fault events across all assets, whatever each asset's current status. Total cost {{ total_cost|money }}.</p>
+
 <div class="card scroll">
 <table>
-<tr><th>Date</th><th>Asset</th><th>Model</th><th>Location</th><th>Status now</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
+<tr>
+  {% for key, label in columns %}
+  <th class="{{ 'right' if key == 'cost' else '' }}">
+    <a class="sortlink" href="{{ sort_link(key) }}">
+      {% if key == 'status' and sort == 'status' %}<span class="arrow st-{{ first|replace(' ', '-') }}">▲</span>
+      {% elif key == sort %}<span class="arrow">{{ '▲' if direction == 'asc' else '▼' }}</span>
+      {% else %}<span class="arrow faint">↕</span>{% endif %}
+      {{ label }}
+    </a>
+  </th>
+  {% endfor %}
+  <th>Action</th>
+</tr>
 {% for e in events %}
-<tr><td class="nw">{{ e.event_date }}</td>
-<td class="nw"><a href="{{ url_for('asset_detail', asset_id=e.asset_id) }}">{{ e.asset_id }}</a></td>
-<td>{{ e.model }}</td><td>{{ e.location }}</td>
-<td><span class="badge b-{{ e.status|replace(' ', '-') }}">{{ e.status }}</span></td>
-<td>{{ e.fault_category }}</td><td>{{ e.fault_description or 'Not recorded' }}</td><td>{{ e.action_taken }}{% if e.status == 'Operational' %} <span class="done">(Done)</span>{% endif %}</td>
-<td>{{ e.technician or 'Not recorded' }}</td><td class="right nw">{{ e.cost_usd|money }}</td></tr>
+<tr>
+  <td class="nw">{{ e.event_date }}</td>
+  <td class="nw"><a href="{{ url_for('asset_detail', asset_id=e.asset_id) }}"><b>{{ e.asset_id }}</b></a></td>
+  <td>{{ e.model }}</td>
+  <td>{{ e.location }}</td>
+  <td><span class="badge b-{{ e.status|replace(' ', '-') }}">{{ e.status }}</span></td>
+  <td>{{ e.fault_category }}</td>
+  <td>{{ e.fault_description or 'Not recorded' }}</td>
+  <td>{{ e.action_taken }}{% if e.status == 'Operational' %} <span class="done">(Done)</span>{% endif %}</td>
+  <td>{{ e.technician or 'Not recorded' }}</td>
+  <td class="right nw">{{ e.cost_usd|money }}</td>
+  <td class="nw">
+    <a class="btn sec small" href="{{ url_for('maintenance_event_edit', event_id=e.id) }}">Edit</a>
+  </td>
+</tr>
 {% else %}
-<tr><td colspan="10" class="muted">No fault events recorded.</td></tr>
+<tr><td colspan="11" class="muted">No fault events recorded.</td></tr>
 {% endfor %}
-</table></div>
+</table>
+</div>
 {% endblock %}

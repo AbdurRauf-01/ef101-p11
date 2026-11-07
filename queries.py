@@ -24,8 +24,7 @@ FIELDS = ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "ram_gb", "r
           "storage_type", "storage_gb", "gpu", "gpu_vram_gb", "os", "ip_address", "location",
           "purchase_date", "warranty_expiry", "status", "status_category", "status_detail",
           "status_action", "status_technician", "status_date", "status_cost"]
-CURRENT_FAULT_FIELDS = ["status_category", "status_detail", "status_action", "status_technician", "status_date",
-                        "status_cost"]
+CURRENT_FAULT_FIELDS = ["status_category", "status_detail", "status_action", "status_technician", "status_date", "status_cost"]
 
 # Asset list sorting: column key from the URL -> SQL expression. Anything else is ignored.
 SORT_COLUMNS = {
@@ -33,6 +32,20 @@ SORT_COLUMNS = {
     "storage": "a.storage_gb", "gpu": "a.gpu", "location": "a.location", "status": "a.status",
     "warranty": "a.warranty_expiry",
     "faults": "(SELECT COUNT(*) FROM maintenance m WHERE m.asset_id=a.asset_id)",
+}
+
+# Fault history sorting: column key -> SQL expression.
+FAULT_SORT_COLUMNS = {
+    "date": "m.event_date",
+    "asset_id": "m.asset_id",
+    "model": "a.model",
+    "location": "a.location",
+    "status": "a.status",
+    "category": "m.fault_category",
+    "description": "m.fault_description",
+    "action": "m.action_taken",
+    "technician": "m.technician",
+    "cost": "m.cost_usd",
 }
 
 EVENT_FIELDS = ["id", "asset_id", "event_date", "fault_category", "fault_description",
@@ -155,27 +168,51 @@ def filter_options():
 
 
 # ---- Assets: write ----------------------------------------------------------
-def _add_step(db, asset_id, step_date, action, technician):
-    """One step of an open fault (what was done, when, by whom). Not history until the fault closes."""
-    db.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician) VALUES (?,?,?,?)",
-               (asset_id, step_date, action or "", technician or ""))
+def _add_step(db, asset_id, step_date, action, technician, cost):
+    """One step of an open fault. Not history: it is combined into the history entry when the fault closes."""
+    db.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician,cost_usd) VALUES (?,?,?,?,?)",
+               (asset_id, step_date, action or "", technician or "", float(cost or 0)))
 
 
 def _close_fault(db, asset_id, ev):
-    """Closing a fault writes ONE history entry: its Action taken lists every step (date: action) and the final
-    action; its cost is the Updated Cost entered at closing (the fault's current total). Steps are then removed.
-    ev = event_date, fault_category, fault_description, action, technician, cost."""
-    steps = db.execute("SELECT step_date, action FROM fault_steps WHERE asset_id=? ORDER BY id",
+    """Closing a fault writes ONE history entry. Its Action taken lists every step (date: action) and the
+    final action; its cost is the single Updated Cost (ev['cost']). The steps are then removed.
+    ev = event_date, fault_category, fault_description, action, technician, cost (all validated by the app)."""
+    steps = db.execute("SELECT step_date, action, cost_usd FROM fault_steps WHERE asset_id=? ORDER BY id",
                        (asset_id,)).fetchall()
     parts = [f"{s['step_date']}: {s['action']}" for s in steps if s["action"]]
     final = (ev.get("action") or "").strip()
     if final and not (steps and steps[-1]["action"] == final):
         parts.append(f"{ev['event_date']}: {final}")
+    cost_val = ev.get("cost")
+    if cost_val is not None and str(cost_val).strip() != "" and float(cost_val) > 0:
+        cost = float(cost_val)
+    else:
+        cost_row = db.execute("SELECT status_cost FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
+        asset_cost = float(cost_row[0] or 0) if cost_row and cost_row[0] is not None else 0
+        if asset_cost > 0:
+            cost = asset_cost
+        elif steps and steps[-1]["cost_usd"] is not None:
+            cost = float(steps[-1]["cost_usd"])
+        else:
+            cost = float(cost_val or 0)
     db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
                "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
                (asset_id, ev["event_date"], ev["fault_category"], ev["fault_description"],
-                "; ".join(parts) or final, ev["technician"], float(ev.get("cost") or 0)))
+                "; ".join(parts) or final, ev["technician"], cost))
     db.execute("DELETE FROM fault_steps WHERE asset_id=?", (asset_id,))
+
+
+def open_fault_cost(asset_id):
+    """Cost recorded so far for the open fault of this PC: Updated Cost (last action's cost)."""
+    row = get_db().execute("SELECT status_cost FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
+    if row and row["status_cost"] is not None:
+        return float(row["status_cost"])
+    step = get_db().execute("SELECT cost_usd FROM fault_steps WHERE asset_id=? ORDER BY id DESC LIMIT 1",
+                            (asset_id,)).fetchone()
+    if step and step["cost_usd"] is not None:
+        return float(step["cost_usd"])
+    return 0.0
 
 
 def get_steps(asset_id):
@@ -240,25 +277,26 @@ def get_events(asset_id):
 
 
 def log_event(asset_id, f, cost, new_status, current=None):
-    """Log form. Operational = close the fault: one history entry whose cost is the Updated Cost.
-    Faulty / Under Repair = keep the fault open; the Updated Cost replaces the fault's current total,
-    and a step is recorded when the action changed.
+    """Log form. Operational = close the fault (one history entry, all steps combined).
+    Faulty / Under Repair = keep the fault open and update current fault fields + Updated Cost.
+    A step is recorded if there is a new action.
     f = event_date, fault_category, fault_description, action_taken, technician (validated by the app)."""
     db = get_db()
     try:
         if new_status == "Operational":
             _close_fault(db, asset_id, dict(f, action=f["action_taken"], cost=cost))
             db.execute("UPDATE assets SET status='Operational', status_category=NULL, status_detail=NULL, "
-                       "status_action=NULL, status_technician=NULL, status_date=NULL, status_cost=NULL "
-                       "WHERE asset_id=?", (asset_id,))
+                       "status_action=NULL, status_technician=NULL, status_date=NULL, status_cost=NULL WHERE asset_id=?", (asset_id,))
         else:
             prev = db.execute("SELECT status_action FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
+            cost_val = float(cost or 0)
             db.execute("UPDATE assets SET status=?, status_category=?, status_detail=?, status_action=?, "
                        "status_technician=?, status_date=?, status_cost=? WHERE asset_id=?",
                        (new_status, current["category"], current["detail"], current["action"],
-                        current["technician"], current["date"], float(cost or 0), asset_id))
-            if current["action"] and current["action"] != (prev["status_action"] or ""):
-                _add_step(db, asset_id, f["event_date"], current["action"], current["technician"])
+                        current["technician"], current["date"], cost_val, asset_id))
+            new_work = current["action"] and current["action"] != ((prev["status_action"] if prev else "") or "")
+            if new_work:
+                _add_step(db, asset_id, f["event_date"], current["action"], current["technician"], cost_val)
         db.commit()
     except Exception:
         db.rollback()
@@ -267,50 +305,129 @@ def log_event(asset_id, f, cost, new_status, current=None):
         db.close()
 
 
-def update_history_entry(event_id, f):
-    """Correct a history entry (wording, date, category, cost). Its id does not change."""
-    db = get_db()
-    try:
-        db.execute("UPDATE maintenance SET event_date=?, fault_category=?, fault_description=?, action_taken=?, "
-                   "technician=?, cost_usd=? WHERE id=?",
-                   (f["event_date"], f["fault_category"], f["fault_description"], f["action_taken"],
-                    f["technician"], float(f["cost"]), event_id))
-        db.commit()
-    finally:
-        db.close()
-
-
-def update_step(step_id, f):
-    """Correct a step of an open fault (wording, date, technician)."""
-    db = get_db()
-    try:
-        db.execute("UPDATE fault_steps SET step_date=?, action=?, technician=? WHERE id=?",
-                   (f["step_date"], f["action"], f["technician"], step_id))
-        db.commit()
-    finally:
-        db.close()
-
-
-def get_event(event_id):
-    return get_db().execute("SELECT * FROM maintenance WHERE id=?", (event_id,)).fetchone()
-
-
-def get_step(step_id):
-    return get_db().execute("SELECT * FROM fault_steps WHERE id=?", (step_id,)).fetchone()
-
-
 def all_events():
     return get_db().execute("SELECT * FROM maintenance ORDER BY event_date DESC, id DESC").fetchall()
 
 
-def fault_history(limit=None):
-    """Maintenance events across ALL assets, newest first, whatever their current status.
-    a.status is included so the page can mark finished work as (Done)."""
-    sql = ("SELECT m.*, a.model, a.location, a.status FROM maintenance m "
-           "JOIN assets a ON a.asset_id=m.asset_id ORDER BY m.event_date DESC, m.id DESC")
-    if limit is None:
-        return get_db().execute(sql).fetchall()
-    return get_db().execute(sql + " LIMIT ?", (int(limit),)).fetchall()
+def get_maintenance_event(event_id):
+    """Retrieve a single maintenance event by its ID."""
+    return get_db().execute("SELECT * FROM maintenance WHERE id=?", (event_id,)).fetchone()
+
+
+def update_maintenance_event(event_id, event_date, fault_category, fault_description, action_taken, technician, cost_usd):
+    """Update a maintenance event in the history."""
+    db = get_db()
+    try:
+        db.execute("UPDATE maintenance SET event_date=?, fault_category=?, fault_description=?, "
+                   "action_taken=?, technician=?, cost_usd=? WHERE id=?",
+                   (event_date, fault_category, fault_description or "", action_taken or "",
+                    technician or "", float(cost_usd or 0), event_id))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def delete_maintenance_event(event_id):
+    """Delete a maintenance event by its ID."""
+    db = get_db()
+    try:
+        db.execute("DELETE FROM maintenance WHERE id=?", (event_id,))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def get_step(step_id):
+    """Retrieve a single fault step by ID."""
+    return get_db().execute("SELECT * FROM fault_steps WHERE id=?", (step_id,)).fetchone()
+
+
+def update_step(step_id, step_date, action, technician, cost_usd):
+    """Update an open fault step."""
+    db = get_db()
+    try:
+        cost_val = float(cost_usd or 0)
+        db.execute("UPDATE fault_steps SET step_date=?, action=?, technician=?, cost_usd=? WHERE id=?",
+                   (step_date, action or "", technician or "", cost_val, step_id))
+        row = db.execute("SELECT asset_id FROM fault_steps WHERE id=?", (step_id,)).fetchone()
+        if row:
+            aid = row[0]
+            latest = db.execute("SELECT id FROM fault_steps WHERE asset_id=? ORDER BY id DESC LIMIT 1",
+                                (aid,)).fetchone()
+            if latest and latest["id"] == step_id:
+                db.execute("UPDATE assets SET status_cost=? WHERE asset_id=? AND status IN ('Faulty', 'Under Repair')",
+                           (cost_val, aid))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def delete_step(step_id):
+    """Delete a single fault step by ID."""
+    db = get_db()
+    try:
+        row = db.execute("SELECT asset_id FROM fault_steps WHERE id=?", (step_id,)).fetchone()
+        aid = row[0] if row else None
+        db.execute("DELETE FROM fault_steps WHERE id=?", (step_id,))
+        if aid:
+            latest = db.execute("SELECT cost_usd FROM fault_steps WHERE asset_id=? ORDER BY id DESC LIMIT 1",
+                                (aid,)).fetchone()
+            new_cost = float(latest["cost_usd"]) if latest and latest["cost_usd"] is not None else 0.0
+            db.execute("UPDATE assets SET status_cost=? WHERE asset_id=? AND status IN ('Faulty', 'Under Repair')",
+                       (new_cost, aid))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def update_current_fault(asset_id, status_date, status_category, status_detail, status_action, status_technician, status_cost):
+    """Update the current fault information directly on an asset."""
+    db = get_db()
+    try:
+        db.execute("UPDATE assets SET status_date=?, status_category=?, status_detail=?, "
+                   "status_action=?, status_technician=?, status_cost=? WHERE asset_id=?",
+                   (status_date, status_category, status_detail or "", status_action or "",
+                    status_technician or "", float(status_cost or 0), asset_id))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def fault_history(limit=None, sort="date", direction="desc", first=None):
+    """Maintenance events across ALL assets, dynamically sorted like Asset lists table."""
+    is_desc = str(direction).lower() == "desc"
+    dir_sql = "DESC" if is_desc else "ASC"
+
+    if sort == "status":
+        first_st = first if first in ("Operational", "Under Repair", "Faulty") else "Operational"
+        order_sql = f"(CASE WHEN a.status=? THEN 0 ELSE 1 END), a.status, a.asset_id ASC, m.event_date DESC"
+        params = [first_st]
+    else:
+        col = FAULT_SORT_COLUMNS.get(sort, FAULT_SORT_COLUMNS["date"])
+        order_sql = f"{col} {dir_sql}, m.id {dir_sql}"
+        params = []
+
+    sql = (f"SELECT m.*, a.model, a.location, a.status FROM maintenance m "
+           f"JOIN assets a ON a.asset_id=m.asset_id ORDER BY {order_sql}")
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(int(limit))
+    return get_db().execute(sql, params).fetchall()
 
 
 # ---- Dashboard --------------------------------------------------------------

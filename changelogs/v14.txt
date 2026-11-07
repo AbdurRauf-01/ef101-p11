@@ -1,0 +1,6 @@
+What changed:
+
+1. Code split: A new db.py holds the database connection and setup. The SQL stays in queries.py, and the routes are unchanged.
+2. Cost logic: The Updated Cost is now the authority for an open fault. If it’s set, it wins. If it’s blank, the last step’s cost is used. Deleting or editing a step also updates the fault’s cost.
+3. Dates: The app accepts dd/mm/yyyy and dd-mm-yyyy as well as ISO dates.
+4. Asset IDs: A custom ID can be entered, or the ID is generated from the place.

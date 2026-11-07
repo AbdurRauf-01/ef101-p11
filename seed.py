@@ -133,7 +133,7 @@ def main():
         # an open fault goes into the history only when it is closed; Under Repair always has a technician
         tech = (TECHS[int(a[0].split("-")[-1]) % len(TECHS)] if a[14] == "Under Repair" else "") if cur else None
         action, when = ("", TODAY.isoformat()) if cur else (None, None)
-        cost = 0.0 if cur else None            # Updated Cost of an open fault (none yet in the demo)
+        cost = 0 if cur else None
         rows.append([a[0], a[1], a[2], a[3], a[4], a[5], ram_type, a[6], a[7], a[8], vram, a[9], a[10],
                      a[11], a[12], a[13], a[14], cat, detail, action, tech, when, cost, a[15]])
     conn.executemany(

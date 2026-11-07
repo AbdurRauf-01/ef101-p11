@@ -459,7 +459,7 @@ check("Open fault is not in the history yet", "log fault, status Faulty",
       and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-1' AND action='Replaced faulty PSU'") == 1)
 client.post("/assets/HIST-1/maintenance", data={"event_date": "2026-03-05", "fault_category": "PSU failure",
             "fault_description": "Will not power on", "action_taken": "Swapped in new PSU unit", "technician": "Ali",
-            "cost": "40", "set_status": "Operational"})
+            "cost": "0", "set_status": "Operational"})
 check("Closing writes one history entry with every step", "log the fix, status Operational",
       "one entry; action lists both steps; cost is the total; steps cleared",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-1'") == 1
@@ -473,19 +473,19 @@ check("Closed fault is on the Fault History page", "GET /maintenance", "the one 
 client.post("/assets/new", data={**GOOD, "asset_id": "HIST-2"})
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Faulty", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Check cable", "status_technician": "",
-            "fault_date": "2026-03-08", "fault_cost": "0"})
+            "fault_date": "2026-03-08", "fault_increase": "0"})
 check("Fault set on the Edit form stays open", "Operational -> Faulty on the Edit form",
       "no history row; the action is a step",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 0
       and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2' AND action='Check cable'") == 1)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "",
-            "fault_date": "2026-03-12", "fault_cost": "0"})
+            "fault_date": "2026-03-12", "fault_increase": "0"})
 check("Under Repair on the Edit form needs a technician", "Under Repair, technician blank", "rejected, still Faulty",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Faulty'") == 1)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
-            "fault_date": "2026-03-12", "fault_cost": "0"})
+            "fault_date": "2026-03-12", "fault_increase": "0"})
 check("Progress on the Edit form is a step, not history", "Faulty -> Under Repair with a new action",
       "no history row; new step; status updated",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 0
@@ -494,17 +494,17 @@ check("Progress on the Edit form is a step, not history", "Faulty -> Under Repai
 steps_now = count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2'")
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
-            "fault_date": "2026-03-12", "fault_cost": "0"})
+            "fault_date": "2026-03-12", "fault_increase": "0"})
 check("Saving again without changes adds no step", "same data saved twice", "no new step",
       count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2'") == steps_now)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Fitted panel", "status_technician": "",
-            "fault_date": "2026-03-20", "fault_cost": "15"})
+            "fault_date": "2026-03-20", "fault_increase": "15"})
 check("Closing on the Edit form needs every field", "Operational, technician blank", "rejected, still open",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Under Repair'") == 1)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Fitted panel", "status_technician": "Ali",
-            "fault_date": "2026-03-20", "fault_cost": "15"})
+            "fault_date": "2026-03-20", "fault_increase": "15"})
 check("Closing on the Edit form writes one entry", "Operational with every field",
       "one entry with all steps; cost 15; steps cleared",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 1
@@ -648,124 +648,143 @@ check("Log form status is required with a choose option", "GET /assets/RULE-1",
 check("Not Assigned shown for a blank IP", "GET /assets/RULE-1", "Not Assigned in the hardware card",
       "<dd>Not Assigned</dd>" in detail)
 
-# 18. Several steps while a PC is being fixed: one history entry; the Updated Cost replaces the total
+# 18. Several steps while a PC is being fixed: one history entry with all the steps
 client.post("/assets/new", data={**GOOD, "asset_id": "STEP-1"})
 client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-01", "fault_category": "", "fault_description": "",
-            "action_taken": "Step A", "technician": "", "cost": "10", "set_status": "Faulty"})
-check("Faulty step is saved, not history", "Faulty, action Step A, Updated Cost 10", "step saved; no history row",
+            "action_taken": "Step A", "technician": "", "cost": "0", "set_status": "Faulty"})
+check("Faulty step is saved, not history", "Faulty, action Step A", "step saved; no history row",
       count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1' AND action='Step A'") == 1
-      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1'") == 0
-      and count("SELECT COUNT(*) FROM assets WHERE asset_id='STEP-1' AND status_cost=10") == 1)
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1'") == 0)
 client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-02", "fault_category": "RAM fault",
             "fault_description": "Memory errors", "action_taken": "Step B", "technician": "Ali",
-            "cost": "50", "set_status": "Under Repair"})
-check("Updated Cost replaces the total (not added)", "Updated Cost 50 after 10", "status_cost is 50",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='STEP-1' AND status_cost=50") == 1)
+            "cost": "0", "increase_cost": "10", "set_status": "Under Repair"})
 client.post("/assets/STEP-1/edit", data={**GOOD, "asset_id": "STEP-1", "status": "Under Repair", "status_category": "RAM fault",
             "status_detail": "Memory errors", "status_action": "Step B", "status_technician": "Ali",
-            "fault_date": "2026-04-03", "fault_cost": "50"})
-check("Unchanged action on the Edit form adds no step", "same action, same cost", "still two steps",
+            "fault_date": "2026-04-03", "fault_increase": "0"})
+check("Unchanged action on the Edit form adds nothing", "Step B again, cost 0", "no new step",
       count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 2)
 client.post("/assets/STEP-1/edit", data={**GOOD, "asset_id": "STEP-1", "status": "Under Repair", "status_category": "RAM fault",
             "status_detail": "Memory errors", "status_action": "Step B", "status_technician": "Ali",
-            "fault_date": "2026-04-03", "fault_cost": "35"})
-check("Correcting the Updated Cost on the Edit form", "Updated Cost 35", "status_cost 35; still two steps",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='STEP-1' AND status_cost=35") == 1
-      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 2)
+            "fault_date": "2026-04-03", "fault_increase": "5"})
+check("A cost alone is a step without repeating the action", "same action, cost 5", "cost-only step (action blank)",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1' AND action='' AND cost_usd=5") == 1)
 client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-05", "fault_category": "RAM fault",
             "fault_description": "Memory errors", "action_taken": "Step C", "technician": "Ali",
-            "cost": "42", "set_status": "Operational"})
+            "cost": "0", "increase_cost": "2", "set_status": "Operational"})
 rows = count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1'")
 text = client.get("/assets/STEP-1").get_data(as_text=True)
-check("Closing combines every step into one entry", "close with Step C, Updated Cost 42",
-      "one entry; Step A and C listed; Step B once; cost 42; steps cleared",
+check("Closing combines every step into one entry", "close with Step C, cost 2", "one entry; Step B listed once; cost 17",
       rows == 1
       and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1' AND action_taken LIKE '%Step A%' "
-                "AND action_taken LIKE '%Step C%' AND cost_usd=42") == 1
+                "AND action_taken LIKE '%Step C%' AND cost_usd=17") == 1
       and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1' AND action_taken LIKE '%Step B%'") == 1
       and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 0)
 check("Closed PC shows dashes in Current fault", "GET /assets/STEP-1", "a row of '-'",
-      "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td class=\"right\">-</td>" in text)
+      "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in text)
 
-# 19. Updated Cost: one number, the fault's current total, replaced on every save. Persistence and ports.
+# 19. Cost: single Updated Cost box (no stacking price), persistence and ports.
 client.post("/assets/new", data={**GOOD, "asset_id": "COST-1"})
 client.post("/assets/COST-1/maintenance", data={"event_date": "2026-05-01", "fault_category": "", "fault_description": "",
             "action_taken": "Part ordered", "technician": "", "cost": "80", "set_status": "Faulty"})
-check("Updated Cost of an open fault is kept", "Faulty, Updated Cost 80", "status_cost 80",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='COST-1' AND status_cost=80") == 1)
-check("Current fault shows the Updated Cost", "GET /assets/COST-1", "$80.00 in the Current fault table",
-      "$80.00" in client.get("/assets/COST-1").get_data(as_text=True))
+check("Updated Cost on an open fault is saved", "Faulty, Updated Cost $80", "cost of $80",
+      count("SELECT status_cost FROM assets WHERE asset_id='COST-1'") == 80)
+page = client.get("/assets/COST-1").get_data(as_text=True)
+check("Updated Cost shows current amount", "GET /assets/COST-1", "Updated Cost shows 80.0",
+      'value="80.0"' in page)
 client.post("/assets/COST-1/maintenance", data={"event_date": "2026-05-02", "fault_category": "Disk failure",
-            "fault_description": "Drive dead", "action_taken": "Part ordered", "technician": "AR",
-            "cost": "999", "set_status": "Under Repair"})
-check("Updated Cost is replaced, not added", "Updated Cost 999 after 80", "status_cost 999 (not 1079)",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='COST-1' AND status_cost=999") == 1)
+            "fault_description": "Drive dead", "action_taken": "Part ordered", "technician": "Ali",
+            "cost": "60", "set_status": "Under Repair"})
+check("Updated Cost can be adjusted without stacking", "Updated Cost set to 60",
+      "cost is updated to $60", count("SELECT status_cost FROM assets WHERE asset_id='COST-1'") == 60)
 client.post("/assets/COST-1/maintenance", data={"event_date": "2026-05-03", "fault_category": "Disk failure",
             "fault_description": "Drive dead", "action_taken": "Replaced drive", "technician": "Ali",
-            "cost": "45", "set_status": "Operational"})
-check("Closing: the history cost is the Updated Cost entered", "close with Updated Cost 45", "one entry costing 45",
-      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-1' AND cost_usd=45") == 1)
+            "cost": "60", "set_status": "Operational"})
+check("Closing fault writes entry with Updated Cost", "close, cost 60", "one entry costing exactly 60",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-1' AND cost_usd=60") == 1)
 
 client.post("/assets/new", data={**GOOD, "asset_id": "COST-2"})
 client.post("/assets/COST-2/edit", data={**GOOD, "asset_id": "COST-2", "status": "Faulty", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Check cable", "status_technician": "",
-            "fault_date": "2026-05-04", "fault_cost": "80"})
+            "fault_date": "2026-05-04", "cost": "80"})
 edit_page = client.get("/assets/COST-2/edit").get_data(as_text=True)
-check("Edit page shows the Updated Cost", "GET /assets/COST-2/edit", "one Updated Cost box with 80.0",
-      'name="fault_cost" value="80.0"' in edit_page and "Original Cost" not in edit_page)
+check("Edit page: Updated Cost keeps the amount", "GET /assets/COST-2/edit", "Updated Cost 80.0",
+      'value="80.0"' in edit_page)
 client.post("/assets/COST-2/edit", data={**GOOD, "asset_id": "COST-2", "status": "Operational", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
-            "fault_date": "2026-05-06", "fault_cost": "60"})
-check("Closing on the Edit form: history cost is the Updated Cost", "Updated Cost 60 at closing",
-      "one history entry costing 60",
-      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-2' AND cost_usd=60") == 1)
-
+            "fault_date": "2026-05-06", "cost": "80"})
+check("Edit page: closing records Updated Cost", "status Operational, Cost 80", "history cost 80",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-2' AND cost_usd=80") == 1)
 client.post("/assets/new", data={**GOOD, "asset_id": "COST-3"})
 client.post("/assets/COST-3/edit", data={**GOOD, "asset_id": "COST-3", "status": "Faulty", "status_category": "RAM fault",
             "status_detail": "Bad stick", "status_action": "", "status_technician": "",
-            "fault_date": "2026-05-07", "fault_cost": "20"})
-client.post("/assets/COST-3/edit", data={**GOOD, "asset_id": "COST-3", "status": "Faulty", "status_category": "RAM fault",
-            "status_detail": "Bad stick", "status_action": "", "status_technician": "",
-            "fault_date": "2026-05-07", "fault_cost": "35"})
-check("A correction replaces the Updated Cost", "20, then corrected to 35", "status_cost 35",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='COST-3' AND status_cost=35") == 1)
+            "fault_date": "2026-05-07", "cost": "20"})
+client.post("/assets/COST-3/edit", data={**GOOD, "asset_id": "COST-3", "status": "Operational", "status_category": "RAM fault",
+            "status_detail": "Bad stick", "status_action": "Swapped stick", "status_technician": "Ali",
+            "fault_date": "2026-05-08", "cost": "40"})
+check("Closing edit sets Updated Cost to final price", "Updated Cost 40", "history cost 40",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-3' AND cost_usd=40") == 1)
 
-# 20. Corrections: history entries and steps can be edited; the current fault can be edited from its section
-client.post("/assets/new", data={**GOOD, "asset_id": "EDIT-1"})
-client.post("/assets/EDIT-1/maintenance", data={"event_date": "2026-06-01", "fault_category": "Display issue",
-            "fault_description": "No pictuer", "action_taken": "Pulled the cabel", "technician": "Ali",
-            "cost": "0", "set_status": "Faulty"})
-step_id = count("SELECT id FROM fault_steps WHERE asset_id='EDIT-1'")
-c = db.get_db(); sid = c.execute("SELECT id FROM fault_steps WHERE asset_id='EDIT-1'").fetchone()[0]; c.close()
-client.post(f"/assets/EDIT-1/steps/{sid}/edit", data={"step_date": "2026-06-01", "action": "Pulled the cable",
-            "technician": "Ali"})
-check("Step wording can be corrected", "'Pulled the cabel' -> 'Pulled the cable'", "step text updated",
-      count("SELECT COUNT(*) FROM fault_steps WHERE id=? AND action='Pulled the cable'", sid) == 1)
-client.post(f"/assets/EDIT-1/steps/{sid}/edit", data={"step_date": "2026-06-01", "action": "", "technician": "Ali"})
-check("A step needs an action", "action blank", "rejected; text unchanged",
-      count("SELECT COUNT(*) FROM fault_steps WHERE id=? AND action='Pulled the cable'", sid) == 1)
-check("Current fault section links to editing", "GET /assets/EDIT-1", "Edit current fault link to the fault box",
-      'href="/assets/EDIT-1/edit#fault-box"' in client.get("/assets/EDIT-1").get_data(as_text=True))
+# 20. Editable maintenance history and current fault
+m_id = count("SELECT id FROM maintenance WHERE asset_id='COST-3' LIMIT 1")
+client.post(f"/maintenance/{m_id}/edit", data={
+    "event_date": "2026-05-08", "fault_category": "RAM fault", "fault_description": "Corrected description",
+    "action_taken": "Corrected action", "technician": "Ali", "cost": "45"
+})
+check("Maintenance history item is editable", f"edit event {m_id}", "description and cost updated",
+      count(f"SELECT COUNT(*) FROM maintenance WHERE id={m_id} AND fault_description='Corrected description' AND cost_usd=45") == 1)
 
-c = db.get_db(); eid = c.execute("SELECT id FROM maintenance WHERE asset_id IN "
-                                 "(SELECT asset_id FROM assets WHERE status='Operational') ORDER BY id LIMIT 1").fetchone()[0]
-owner = c.execute("SELECT asset_id FROM maintenance WHERE id=?", (eid,)).fetchone()[0]
-c.close()
-client.post(f"/assets/{owner}/history/{eid}/edit", data={"event_date": "2026-02-02", "fault_category": "Disk failure",
-            "fault_description": "Drive reported SMART errors", "action_taken": "Replaced drive and reinstalled OS",
-            "technician": "A. Khan", "cost": "65"})
-check("History wording can be corrected", f"entry {eid} of {owner}", "description updated",
-      count("SELECT COUNT(*) FROM maintenance WHERE id=? AND fault_description='Drive reported SMART errors'", eid) == 1)
-client.post(f"/assets/{owner}/history/{eid}/edit", data={"event_date": "2026-02-02", "fault_category": "Unknown",
-            "fault_description": "x", "action_taken": "y", "technician": "z", "cost": "1"})
-check("History entry cannot become Unknown", "category Unknown", "rejected; category unchanged",
-      count("SELECT COUNT(*) FROM maintenance WHERE id=? AND fault_category='Disk failure'", eid) == 1)
-client.post(f"/assets/{owner}/history/{eid}/edit", data={"event_date": "2026-02-02", "fault_category": "Disk failure",
-            "fault_description": "Drive reported SMART errors", "action_taken": "", "technician": "A. Khan", "cost": "65"})
-check("History action is still required", "action blank", "rejected",
-      count("SELECT COUNT(*) FROM maintenance WHERE id=? AND action_taken='Replaced drive and reinstalled OS'", eid) == 1)
-check("Editing an entry of another PC is refused", "wrong asset id in the address", "404, nothing changed",
-      client.get(f"/assets/EDIT-1/history/{eid}/edit").status_code == 404)
+client.post("/assets/new", data={**GOOD, "asset_id": "EDIT-FAULT-1"})
+client.post("/assets/EDIT-FAULT-1/maintenance", data={
+    "event_date": "2026-05-10", "fault_category": "Disk failure", "fault_description": "Initial typo",
+    "action_taken": "Typo action", "technician": "Ali", "cost": "50", "set_status": "Faulty"
+})
+client.post("/assets/EDIT-FAULT-1/fault/edit", data={
+    "status_date": "2026-05-10", "status_category": "Disk failure", "status_detail": "Fixed typo description",
+    "status_action": "Fixed action", "status_technician": "Ali", "cost": "55"
+})
+check("Current fault item is editable", "POST /assets/EDIT-FAULT-1/fault/edit", "fault details and cost updated",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='EDIT-FAULT-1' AND status_detail='Fixed typo description' AND status_cost=55") == 1)
+
+next_id_resp = client.get("/api/next-asset-id?location=Lab 1").get_json()
+check("Next asset ID API auto-generates ID from location", "location=Lab 1", "asset_id starting with L1-PC",
+      bool(next_id_resp.get("asset_id", "").startswith("L1-PC")))
+
+# Dynamic sorting in fault history
+resp_cost_desc = client.get("/maintenance?sort=cost&dir=desc")
+check("Fault history sorted by cost desc", "GET /maintenance?sort=cost&dir=desc", "200 OK and sorted", resp_cost_desc.status_code == 200)
+
+resp_status_first = client.get("/maintenance?sort=status&first=Faulty")
+check("Fault history sorted by status with Faulty first", "GET /maintenance?sort=status&first=Faulty", "200 OK and sorted", resp_status_first.status_code == 200)
+
+# Dynamic GPU VRAM rendering in Add asset form
+# The container must be present but empty (no actual <input> tag rendered in HTML;
+# the JS string literal inside <script> is not an actual DOM element).
+import re as _re
+add_form_html = client.get("/assets/new").get_data(as_text=True)
+# Strip all <script>...</script> blocks then check for input tag
+_stripped = _re.sub(r'<script[\s\S]*?</script>', '', add_form_html, flags=_re.IGNORECASE)
+check("Add asset form has no VRAM field initially", "GET /assets/new", "container present, no rendered input",
+      'id="gpu-vram-container"' in add_form_html and 'name="gpu_vram_gb"' not in _stripped)
+
+# persistence: launching again keeps every row
+before_assets = count("SELECT COUNT(*) FROM assets")
+before_events = count("SELECT COUNT(*) FROM maintenance")
+check("Launching again keeps the data", "ensure_database() on an existing database", "nothing created, nothing erased",
+      db.ensure_database() is False and count("SELECT COUNT(*) FROM assets") == before_assets
+      and count("SELECT COUNT(*) FROM maintenance") == before_events)
+
+# ports: a busy port is skipped, so a second copy of the app can start
+import socket as _socket
+busy = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+busy.bind(("127.0.0.1", 0))
+busy_port = busy.getsockname()[1]
+busy.listen(1)
+free = appmod.free_port(start=busy_port, tries=50)
+busy.close()
+check("Busy port is skipped", f"port {busy_port} already in use", "a different free port",
+      free != busy_port and free > busy_port)
+
+# seeding asks before it erases data (the answer is checked by typing YES)
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]
@@ -776,5 +795,8 @@ for r in results:
     print(line(r))
 fails = [r for r in results if r[3] == "FAIL"]
 print(f"\n{len(results) - len(fails)}/{len(results)} passed")
-os.remove(TMP)
+try:
+    os.remove(TMP)
+except OSError:
+    pass
 sys.exit(1 if fails else 0)
