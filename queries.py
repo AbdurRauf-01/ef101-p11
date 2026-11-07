@@ -67,12 +67,12 @@ def suggest_prefix(name, taken):
     return prefix
 
 
-def add_location(name, prefix):
+def add_location(name, prefix, subnet):
     """Writes are committed, or rolled back and closed on error, so a failed save never leaves
     a transaction open (an open one would lock the database for the next request)."""
     db = get_db()
     try:
-        db.execute("INSERT INTO locations (name,prefix) VALUES (?,?)", (name, prefix))
+        db.execute("INSERT INTO locations (name,prefix,ip_subnet) VALUES (?,?,?)", (name, prefix, subnet))
         db.commit()
     except Exception:
         db.rollback()
@@ -288,3 +288,53 @@ def dashboard_data():
         f"FROM assets a WHERE {attention_sql()} ORDER BY a.asset_id").fetchall()
     return {"stats": stats, "charts": charts, "fault_cats": fault_cats,
             "top_assets": top_assets, "attention": attention}
+
+
+# ---- IP addresses -------------------------------------------------------------
+def location_subnet(name):
+    """x of this place's range 192.168.x.n, or None for an unknown place."""
+    r = get_db().execute("SELECT ip_subnet FROM locations WHERE name=?", (name,)).fetchone()
+    return r[0] if r else None
+
+
+def next_subnet():
+    """Range number for the next new place: one more than the highest in use."""
+    return get_db().execute("SELECT COALESCE(MAX(ip_subnet),0)+1 FROM locations").fetchone()[0]
+
+
+def pick_ip(subnet, asset_id, used):
+    """Automatic IP for a PC in the range 192.168.<subnet>.n.
+    The number at the end of the asset ID is the host number when it is free:
+    L1-PC-004 -> 192.168.1.4, L2-PC-008 -> 192.168.2.8. Otherwise the lowest free number is used.
+    Returns None when the whole range is taken."""
+    if subnet is None:
+        return None
+    m = re.search(r"(\d+)$", asset_id or "")
+    if m:
+        host = int(m.group(1))
+        ip = f"192.168.{subnet}.{host}"
+        if 1 <= host <= 254 and ip not in used:
+            return ip
+    for host in range(1, 255):
+        ip = f"192.168.{subnet}.{host}"
+        if ip not in used:
+            return ip
+    return None
+
+
+def used_ips(location, exclude_id=""):
+    """IPs already taken by other PCs in this place (exclude_id = the PC being edited)."""
+    rows = get_db().execute("SELECT ip_address FROM assets WHERE location=? AND asset_id<>?",
+                            (location, exclude_id or "")).fetchall()
+    return {r[0] for r in rows if r[0]}
+
+
+def auto_ip(subnet, asset_id, location, exclude_id=""):
+    return pick_ip(subnet, asset_id, used_ips(location, exclude_id))
+
+
+def ip_owner(location, ip, exclude_id=""):
+    """The PC that already has this IP in this place, or None."""
+    r = get_db().execute("SELECT asset_id FROM assets WHERE location=? AND ip_address=? AND asset_id<>?",
+                         (location, ip, exclude_id or "")).fetchone()
+    return r[0] if r else None

@@ -1,0 +1,10 @@
+What changed:
+
+1. Location box and alignment
+- Choosing + Add new location turns the same box into a text field. The separate box below is gone.
+- Press Esc, or clear the text and click away, to return to the list.
+- Every label now has a fixed height, so the inputs in each row line up even when a label wraps.
+2. IP addresses
+- Uniqueness: two PCs in the same place can’t share an IP. Different places can, and the database enforces this too.
+- Automatic assignment: each place has a range number, so its PCs use 192.168.x.n. Lab 1 is 1, Lab 2 is 2, and so on through Library = 6. A blank IP takes its host number from the asset ID. L1-PC-004 gets 192.168.1.4, and L2-PC-008 gets 192.168.2.8. If that number is already taken in the place, the lowest free one is used.
+- New places: a new place gets the next range number. For example, Lab 4 gets 7, and its PCs start at 192.168.7.1.

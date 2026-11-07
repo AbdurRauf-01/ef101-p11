@@ -16,6 +16,8 @@ TODAY = date(2026, 10, 9)
 LOCATION_PREFIX = {"Lab 1": "L1", "Lab 2": "L2", "Lab 3": "L3", "Server Room": "SRV",
                    "Faculty Office": "FAC", "Library": "LIB"}
 LOCATIONS = list(LOCATION_PREFIX)
+# Range number x of each place's IP range 192.168.x.n, in creation order (Lab 1 -> 1 ... Library -> 6).
+LOCATION_SUBNET = {name: i + 1 for i, name in enumerate(LOCATION_PREFIX)}
 
 # GPU memory in GB for the demo GPUs (integrated machines have no VRAM value).
 GPU_VRAM = {"NVIDIA GTX 1650": 4, "NVIDIA RTX 3060": 12, "NVIDIA RTX 3070": 8}
@@ -62,7 +64,8 @@ def rand_date(start, end):
 def main():
     init_db()
     conn = get_db()
-    conn.executemany("INSERT INTO locations (name,prefix) VALUES (?,?)", list(LOCATION_PREFIX.items()))
+    conn.executemany("INSERT INTO locations (name,prefix,ip_subnet) VALUES (?,?,?)",
+                     [(n, p, LOCATION_SUBNET[n]) for n, p in LOCATION_PREFIX.items()])
     assets = []
     for i in range(1, 41):
         c = random.choice(CONFIGS)
@@ -74,7 +77,9 @@ def main():
             expiry = purchase.replace(year=purchase.year + warranty_years)
         except ValueError:
             expiry = purchase.replace(year=purchase.year + warranty_years, day=28)
-        ip = f"192.168.{random.randint(1, 4)}.{random.randint(10, 250)}"
+        random.randint(1, 4)        # draws kept so the rest of the demo data does not change
+        random.randint(10, 250)
+        ip = f"192.168.{LOCATION_SUBNET[loc]}.{i}"    # same pattern as the ID: L1-PC-004 -> 192.168.1.4
         assets.append([aid, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], ip,
                        loc, purchase.isoformat(), expiry.isoformat(), "Operational", 1])
 

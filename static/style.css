@@ -94,3 +94,5 @@ details.more summary{cursor:pointer;color:var(--accent);font-size:.85rem;font-we
 details.more summary::-webkit-details-marker{display:none}
 details.more[open] .when-closed,details.more:not([open]) .when-open{display:none}
 .done{color:var(--ok);font-weight:600}
+.formgrid>div{display:flex;flex-direction:column;gap:4px}
+.formgrid label{min-height:2.4em;line-height:1.2;display:flex;align-items:flex-end;margin-bottom:0}

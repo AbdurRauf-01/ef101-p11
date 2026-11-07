@@ -8,7 +8,9 @@ DROP TABLE IF EXISTS locations;
 
 CREATE TABLE locations (
     name    TEXT PRIMARY KEY,                 -- shown in the drop-down, e.g. Lab 1
-    prefix  TEXT NOT NULL UNIQUE              -- start of automatic asset IDs, e.g. L1 -> L1-PC-001
+    prefix  TEXT NOT NULL UNIQUE,             -- start of automatic asset IDs, e.g. L1 -> L1-PC-001
+    ip_subnet INTEGER NOT NULL UNIQUE         -- x in the place's IP range 192.168.x.n (1..254)
+              CHECK (ip_subnet BETWEEN 1 AND 254)
 );
 
 CREATE TABLE assets (
@@ -35,7 +37,8 @@ CREATE TABLE assets (
     active          INTEGER NOT NULL DEFAULT 1,       -- 0 = retired (kept for history)
     -- an Operational asset has no current error; a Faulty / Under Repair asset must state one
     CHECK ((status = 'Operational' AND status_category IS NULL AND status_detail IS NULL)
-        OR (status <> 'Operational' AND status_category IS NOT NULL AND status_detail IS NOT NULL))
+        OR (status <> 'Operational' AND status_category IS NOT NULL AND status_detail IS NOT NULL)),
+    UNIQUE (location, ip_address)                    -- no two PCs in one place share an IP
 );
 
 CREATE TABLE maintenance (

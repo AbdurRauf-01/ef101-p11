@@ -5,11 +5,15 @@
 <div class="card">
 <form method="post" novalidate>
 <div class="formgrid">
-  <div><label>Location *</label><select name="location"><option value="">— choose —</option>
-    {% for o in locations %}<option{{ ' selected' if a.get('location')==o }}>{{ o }}</option>{% endfor %}
-    <option value="{{ NEW_LOCATION }}"{{ ' selected' if a.get('location')==NEW_LOCATION }}>+ Add new location…</option></select>
-    <input name="new_location" value="{{ a.get('new_location','') or '' }}" placeholder="New location name, e.g. Lab 4" style="margin-top:6px"></div>
-  <div><label>Asset ID {{ '(blank = assigned automatically from the location)' if new else '(permanent)' }}</label>
+  <div><label>Location *</label>
+    <select name="location" id="loc-select" style="{{ 'display:none' if a.get('location')==NEW_LOCATION }}">
+      <option value="">— choose —</option>
+      {% for o in locations %}<option{{ ' selected' if a.get('location')==o }}>{{ o }}</option>{% endfor %}
+      <option value="{{ NEW_LOCATION }}"{{ ' selected' if a.get('location')==NEW_LOCATION }}>+ Add new location…</option>
+    </select>
+    <input name="new_location" id="loc-new" value="{{ a.get('new_location','') or '' }}"
+           placeholder="Type the new location (Esc = back to list)" style="{{ '' if a.get('location')==NEW_LOCATION else 'display:none' }}"></div>
+  <div><label>Asset ID {{ '(blank = automatic)' if new else '(permanent)' }}</label>
     <input name="asset_id" value="{{ a.get('asset_id','') or '' }}" {{ '' if new else 'readonly' }} placeholder="auto, e.g. L1-PC-041"></div>
   <div><label>Manufacturer *</label><input name="manufacturer" value="{{ a.get('manufacturer','') }}"></div>
   <div><label>Model *</label><input name="model" value="{{ a.get('model','') }}"></div>
@@ -22,9 +26,9 @@
     {% for o in storage_types %}<option{{ ' selected' if a.get('storage_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
   <div><label>Storage capacity (GB) *</label><input name="storage_gb" value="{{ a.get('storage_gb','') }}"></div>
   <div><label>GPU (blank = integrated)</label><input name="gpu" value="{{ a.get('gpu','') or '' }}" placeholder="NVIDIA RTX 3060"></div>
-  <div><label>GPU VRAM (GB) — required if a GPU is listed</label><input name="gpu_vram_gb" value="{{ a.get('gpu_vram_gb','') or '' }}" placeholder="12"></div>
+  <div><label>GPU VRAM (GB), if a GPU is listed</label><input name="gpu_vram_gb" value="{{ a.get('gpu_vram_gb','') or '' }}" placeholder="12"></div>
   <div><label>Operating system *</label><input name="os" value="{{ a.get('os','') }}"></div>
-  <div><label>IP address</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="192.168.1.20"></div>
+  <div><label>IP address (blank = automatic)</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="auto, e.g. 192.168.1.4"></div>
   <div><label>Purchase date * (YYYY-MM-DD)</label><input type="date" name="purchase_date" value="{{ a.get('purchase_date','') }}"></div>
   <div><label>Warranty expiry * (YYYY-MM-DD)</label><input type="date" name="warranty_expiry" value="{{ a.get('warranty_expiry','') }}"></div>
   <div><label>Operational status</label><select name="status">
@@ -37,4 +41,16 @@
 <a class="btn sec" href="{{ url_for('assets') }}">Cancel</a></p>
 </form>
 </div>
+<script>
+// "+ Add new location" turns the same box into a text field; Esc or an empty field goes back to the list.
+(function () {
+  var NEW = "{{ NEW_LOCATION }}";
+  var sel = document.getElementById('loc-select'), inp = document.getElementById('loc-new');
+  function toNew() { sel.style.display = 'none'; inp.style.display = ''; inp.focus(); }
+  function toList() { inp.style.display = 'none'; inp.value = ''; sel.style.display = ''; sel.value = ''; }
+  sel.addEventListener('change', function () { if (sel.value === NEW) toNew(); });
+  inp.addEventListener('blur', function () { if (!inp.value.trim()) toList(); });
+  inp.addEventListener('keydown', function (e) { if (e.key === 'Escape') toList(); });
+})();
+</script>
 {% endblock %}

@@ -2,6 +2,7 @@
 Uses a temporary database (your inventory.db is never touched) and prints a
 Test | Input | Expected | Result table you can paste into the report."""
 import csv
+import sqlite3
 import io
 import os
 import sys
@@ -48,7 +49,7 @@ def sums_match_total(d):
 
 GOOD = dict(asset_id="TEST-001", manufacturer="Dell", model="OptiPlex 7090", cpu="Intel Core i5-12400",
             cpu_family="Core i5", ram_gb="16", ram_type="DDR4", storage_type="SSD", storage_gb="512", gpu="",
-            os="Windows 11 Pro", ip_address="192.168.1.50", location="Lab 1",
+            os="Windows 11 Pro", ip_address="", location="Lab 1",
             purchase_date="2025-01-10", warranty_expiry="2028-01-10", status="Operational")
 
 # 1. Dataset size
@@ -471,6 +472,56 @@ check("Final: assets CSV matches dashboard", "GET /export/assets.csv", "rows = t
 mexp = list(csv.reader(io.StringIO(client.get("/export/maintenance.csv").get_data(as_text=True))))
 check("Final: maintenance CSV matches history", "GET /export/maintenance.csv", "rows = fault events",
       len(mexp) - 1 == d_end["stats"]["events"])
+
+# 15. IP addresses: unique inside a place, automatic from the asset ID and the place's range
+c = db.get_db()
+lab1 = c.execute("SELECT ip_address FROM assets WHERE location='Lab 1' AND active=1 ORDER BY asset_id LIMIT 1").fetchone()[0]
+lib_ips = {r[0] for r in c.execute("SELECT ip_address FROM assets WHERE location='Library'")}
+lab1_free_in_library = next(r[0] for r in c.execute("SELECT ip_address FROM assets WHERE location='Lab 1' ORDER BY asset_id")
+                            if r[0] not in lib_ips)
+c.close()
+n_before = count("SELECT COUNT(*) FROM assets")
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": "Lab 1", "ip_address": lab1})
+check("Same IP in the same place rejected", f"Lab 1 PC with {lab1}", "rejected, nothing saved",
+      count("SELECT COUNT(*) FROM assets") == n_before)
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": "Library", "ip_address": lab1_free_in_library})
+check("Same IP in a different place allowed", f"Library PC with {lab1_free_in_library}", "saved",
+      count("SELECT COUNT(*) FROM assets") == n_before + 1)
+client.post("/assets/new", data={**GOOD, "asset_id": "LIB-PC-077", "location": "Library", "ip_address": ""})
+check("Automatic IP from the asset ID", "LIB-PC-077, IP blank, Library range 6", "192.168.6.77",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='LIB-PC-077' AND ip_address='192.168.6.77'") == 1)
+check("Place ranges are 1 to 6 for the demo places", "locations table", "Lab 1 = 1, Library = 6",
+      count("SELECT ip_subnet FROM locations WHERE name='Lab 1'") == 1
+      and count("SELECT ip_subnet FROM locations WHERE name='Library'") == 6)
+check("Lab 4 gets the next range (7)", "Lab 4 added earlier", "ip_subnet = 7",
+      count("SELECT COUNT(*) FROM locations WHERE name='Lab 4' AND ip_subnet=7") == 1)
+check("Asset in Lab 4 gets 192.168.7.n", "L4-PC-001 in Lab 4", "IP 192.168.7.1",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='L4-PC-001' AND ip_address='192.168.7.1'") == 1)
+c = db.get_db()
+nxt = c.execute("SELECT COALESCE(MAX(ip_subnet),0)+1 FROM locations").fetchone()[0]
+c.close()
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": appmod.NEW_LOCATION, "new_location": "Lab 9"})
+check("Next new place gets the next range", "new place 'Lab 9'", f"range {nxt} and its first PC is 192.168.{nxt}.1",
+      count("SELECT COUNT(*) FROM locations WHERE name='Lab 9' AND ip_subnet=?", nxt) == 1
+      and count("SELECT COUNT(*) FROM assets WHERE location='Lab 9' AND ip_address=?", f"192.168.{nxt}.1") == 1)
+check("No two PCs share an IP inside a place", "all places", "0 duplicates",
+      count("SELECT COUNT(*) FROM (SELECT location, ip_address FROM assets WHERE ip_address IS NOT NULL "
+            "GROUP BY location, ip_address HAVING COUNT(*) > 1)") == 0)
+c = db.get_db()
+pair = c.execute("SELECT a.asset_id, b.asset_id, a.ip_address FROM assets a JOIN assets b "
+                 "ON a.location=b.location AND a.asset_id<b.asset_id AND a.ip_address IS NOT NULL LIMIT 1").fetchone()
+try:
+    c.execute("UPDATE assets SET ip_address=? WHERE asset_id=?", (pair[2], pair[1]))
+    c.commit()
+    db_refused = False
+except sqlite3.IntegrityError:
+    c.rollback()
+    db_refused = True
+c.close()
+check("Database also refuses a duplicate IP in a place", f"copy {pair[2]} to {pair[1]}", "IntegrityError",
+      db_refused)
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": "Lab 1", "ip_address": "10.0.0.999"})
+check("Invalid IP still rejected", "10.0.0.999", "rejected", count("SELECT COUNT(*) FROM assets WHERE ip_address='10.0.0.999'") == 0)
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

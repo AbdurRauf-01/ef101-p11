@@ -95,8 +95,9 @@ def existing_or_new_prefix(name, is_new):
     return queries.location_prefix(name)
 
 
-def validate_asset(f, is_new):
-    """Server-side validation. Returns (clean_dict, errors_list)."""
+def validate_asset(f, is_new, subnet):
+    """Server-side validation. Returns (clean_dict, errors_list).
+    subnet = x of the chosen place's range 192.168.x.n, used when the IP box is left blank."""
     errors = []
     c = {k: (f.get(k) or "").strip() for k in FIELDS}
     for k in ["manufacturer", "model", "cpu", "cpu_family", "os", "location"]:
@@ -130,11 +131,26 @@ def validate_asset(f, is_new):
         c["status_category"] = c["status_detail"] = None   # a working asset has no current error (N/A)
     elif c["status"] in CURRENT_ERROR_STATUSES:
         errors += current_error_problems(c["status_category"], c["status_detail"])
+
+    # IP address: blank = assigned automatically. Two PCs in the same place never share an IP.
+    loc, aid = c["location"], c["asset_id"]
+    skip_self = "" if is_new else aid           # when editing, a PC does not conflict with itself
     if c["ip_address"]:
         try:
-            ipaddress.ip_address(c["ip_address"])
+            ipaddress.IPv4Address(c["ip_address"])
         except ValueError:
             errors.append("IP address is not valid (example: 192.168.1.20).")
+        else:
+            owner = queries.ip_owner(loc, c["ip_address"], skip_self) if loc else None
+            if owner:
+                errors.append(f"IP {c['ip_address']} is already used by {owner} in {loc}. "
+                              "Each PC in one place needs its own IP: clear the IP box to assign one automatically.")
+    elif loc and aid and subnet:
+        c["ip_address"] = queries.auto_ip(subnet, aid, loc, skip_self) or ""
+        if not c["ip_address"]:
+            errors.append(f"No free IP address is left in the range for {loc}.")
+    c["ip_address"] = c["ip_address"] or None
+
     p, w = parse_date(c["purchase_date"]), parse_date(c["warranty_expiry"])
     if not p:
         errors.append("Purchase date must be a valid date (YYYY-MM-DD).")
@@ -168,6 +184,7 @@ def asset_new():
         form = dict(request.form)
         name, is_new_loc = resolve_location(request.form)
         form["location"] = name
+        subnet = queries.next_subnet() if is_new_loc else queries.location_subnet(name)
         errors = []
         if is_new_loc and not name:
             errors.append("Type the name of the new location (for example Lab 4).")
@@ -175,7 +192,7 @@ def asset_new():
             prefix = existing_or_new_prefix(name, is_new_loc)
             if prefix:
                 form["asset_id"] = queries.next_asset_id(prefix)   # automatic ID
-        c, more = validate_asset(form, is_new=True)
+        c, more = validate_asset(form, True, subnet)
         errors += more
         if errors:
             for e in errors:
@@ -183,12 +200,12 @@ def asset_new():
             return render_template("asset_form.html", a=form, new=True)
         try:
             if is_new_loc:
-                queries.add_location(name, existing_or_new_prefix(name, True))
+                queries.add_location(name, existing_or_new_prefix(name, True), subnet)
             queries.insert_asset(c)
         except sqlite3.IntegrityError as e:
             flash(f"Database rejected the record: {e}", "danger")
             return render_template("asset_form.html", a=form, new=True)
-        flash(f"Asset {c['asset_id']} added.", "success")
+        flash(f"Asset {c['asset_id']} added (IP {c['ip_address']}).", "success")
         return redirect(url_for("asset_detail", asset_id=c["asset_id"]))
     return render_template("asset_form.html", a={}, new=True)
 
@@ -215,17 +232,18 @@ def asset_edit(asset_id):
         form["asset_id"] = asset_id                       # primary key is never changed
         name, is_new_loc = resolve_location(request.form)
         form["location"] = name
+        subnet = queries.next_subnet() if is_new_loc else queries.location_subnet(name)
         errors = []
         if is_new_loc and not name:
             errors.append("Type the name of the new location (for example Lab 4).")
-        c, more = validate_asset(form, is_new=False)
+        c, more = validate_asset(form, False, subnet)
         errors += more
         if errors:
             for e in errors:
                 flash(e, "danger")
             return render_template("asset_form.html", a=form, new=False)
         if is_new_loc:
-            queries.add_location(name, existing_or_new_prefix(name, True))
+            queries.add_location(name, existing_or_new_prefix(name, True), subnet)
         queries.update_asset(asset_id, c)
         flash("Asset updated.", "success")
         return redirect(url_for("asset_detail", asset_id=asset_id))
