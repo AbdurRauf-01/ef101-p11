@@ -1,4 +1,4 @@
-# EF101-P11: Computer Hardware Inventory and Maintenance System
+# EF101-P11 Hardware Asset Inventory
 
 Flask + SQLite web app that tracks computer assets (specs, location, warranty, status) and their maintenance/fault history, with a dashboard and CSV export. All data in `inventory.db` is **DEMO data**, not real assets.
 
@@ -10,19 +10,20 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 pip install flask
 python seed.py        # optional: wipes and recreates inventory.db with demo data
 python app.py         # open http://127.0.0.1:5000
-python test_app.py    # runs 34 checks on a temporary database, prints a results table
+python test_app.py    # runs 36 checks on a temporary database, prints a results table
 ```
-No Internet is needed: Bootstrap and Chart.js are served from `static/`.
+No Internet is needed: the app uses no external libraries (plain CSS in `static/style.css`; dashboard charts are CSS bars).
 
 ## Files
 | File | Purpose |
 |---|---|
-| `app.py` | Routes, validation, filters, dashboard queries, CSV export |
+| `app.py` | Backend: routes, input validation, CSV export (no SQL) |
+| `queries.py` | Database layer: every SQL statement (filters, saves, dashboard figures) |
 | `db.py` | SQLite connection + schema creation |
 | `schema.sql` | `assets` and `maintenance` tables (1 asset : many events) |
 | `seed.py` | Demo data generator (fixed random seed, reproducible) |
 | `test_app.py` | Test evidence (add, edit, retire, invalid input, duplicates, filters, history, dashboard, export) |
-| `templates/`, `static/` | HTML (Jinja) pages, CSS, local Bootstrap/Chart.js |
+| `templates/`, `static/` | HTML (Jinja) pages and the stylesheet |
 
 ## Rules to document in the report
 - **Needs attention** (active assets only): status is Faulty or Under Repair, OR 3+ maintenance events, OR warranty expires within 30 days. Constants `ATTENTION_FAULT_COUNT` and `WARRANTY_SOON_DAYS` are at the top of `app.py`.
@@ -32,7 +33,7 @@ No Internet is needed: Bootstrap and Chart.js are served from `static/`.
 - All SQL uses `?` placeholders (no string-built values), so search input cannot inject SQL.
 
 ## Tool and AI disclosure (edit before submitting)
-Built with Python, Flask, SQLite, Bootstrap, Chart.js. Code was drafted with help from Claude (Anthropic) and reviewed, tested and understood by all team members. List exactly which parts and what each member changed.
+Built with Python, Flask, SQLite, Jinja templates and plain CSS. Code was drafted with help from Claude (Anthropic) and reviewed, tested and understood by all team members. List exactly which parts and what each member changed.
 
 ## Limitations
 No login or user roles; data entry is manual; SQLite suits one site and few concurrent users; demo data is synthetic.

@@ -72,6 +72,17 @@ client.post("/assets/TEST-001/edit", data={**GOOD, "ram_gb": "32", "location": "
 check("Edit asset", "RAM 16 -> 32, Lab 2", "values updated",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND ram_gb=32 AND location='Lab 2'") == 1)
 
+# 5b. Edit page must open for existing assets (regression: sqlite3.Row has no .get)
+c = db.get_db()
+ids = [r[0] for r in c.execute("SELECT asset_id FROM assets ORDER BY asset_id")]
+nullgpu = c.execute("SELECT asset_id FROM assets WHERE gpu IS NULL OR gpu='' LIMIT 1").fetchone()
+c.close()
+bad = [i for i in ids if client.get(f"/assets/{i}/edit").status_code != 200]
+check("Edit page opens", "GET /assets/<id>/edit for every asset", "HTTP 200 for all", not bad)
+if nullgpu:
+    html = client.get(f"/assets/{nullgpu[0]}/edit").get_data(as_text=True)
+    check("Edit form blank fields", "asset with no GPU", "no text 'None' in inputs", 'value="None"' not in html)
+
 # 6. Log maintenance + history
 ev = dict(event_date="2026-01-05", fault_category="Disk failure", fault_description="Clicking noise",
           action_taken="Replaced drive", technician="Ali", cost="45.5", set_status="Under Repair")

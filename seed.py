@@ -9,7 +9,8 @@ from datetime import date, timedelta
 from db import get_db, init_db
 
 random.seed(101)
-TODAY = date.today()
+# Fixed reference date (not date.today()) so the demo data is identical on every run and every day.
+TODAY = date(2026, 10, 9)
 
 # (manufacturer, model, cpu, cpu_family, ram, storage_type, storage_gb, gpu, os)
 CONFIGS = [
