@@ -1,0 +1,18 @@
+What changed:
+
+1. Launch scripts:
+- Python check: they look for Python 3.8 or newer that can build a venv. If it’s missing, they install it with winget or python.org on Windows, Homebrew or python.org on macOS, dnf on Fedora, and apt on Ubuntu. The Windows and macOS installers from python.org are checked for the Python Software Foundation signature before they run.
+- venv and packages: they create venv/ and install the packages from the new requirements.txt, which lists only Flask. Later launches skip anything already done. A venv/ copied from another OS is detected and rebuilt.
+- Start: they pick a free port and open your browser.
+
+2. Reset scripts:
+- Confirmation: they ask you to type YES.
+- Backup: they save the current data as inventory.before-reset-<date>.db.
+- Seeding: they then run the same code as python seed.py, so the demo data is 40 assets.
+
+Caveats:
+
+1. Linux double-click: some file managers open .sh files in an editor. The script reopens itself in a terminal when it can, and otherwise you need ./start.sh or “Run in terminal”.
+2. Windows LTSC: it has no winget, so it will use the python.org download. NOT TESTED YET.
+3. Python version: if Python 3.12 is installed on Windows or macOS, the scripts reuse it. The installer fallback fetches 3.12.10.
+4. Other Linux distros: besides Fedora and Debian/Ubuntu, they print install instructions instead.

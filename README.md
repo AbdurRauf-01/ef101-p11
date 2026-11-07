@@ -6,7 +6,19 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 ![Project schema](docs/project-schema.png)
 
 ## Run
-Start the app with `python app.py`, or double-click `start.command` (macOS) / `start.bat` (Windows). On macOS, `start.command` is already executable; if your copy lost that (for example after being copied through some cloud drives), run `chmod +x start.command` once.
+**Two-click launch** (installs Python and the packages first if they are missing; needs internet the first time):
+
+| | Start the app | Reset to demo data |
+|---|---|---|
+| Windows | `start.bat` | `reset-demo-data.bat` |
+| macOS | `start.command` | `reset-demo-data.command` |
+| Fedora / Ubuntu | `start.sh` | `reset-demo-data.sh` |
+
+Double-click the file (Linux: if your file manager only opens it in an editor, run `./start.sh` in a terminal, or set the file manager to "Run in terminal"). The app opens in your browser. If a copy lost its executable bit, run `chmod +x *.command *.sh scripts/*.sh` once.
+
+What the launcher does: finds Python 3.8+ (installs it with winget/python.org on Windows, Homebrew/python.org on macOS, dnf on Fedora, apt on Ubuntu), creates `venv/`, installs `requirements.txt` into it, then starts `app.py`. Later launches skip every step that is already done. `venv/` can be deleted at any time; it is rebuilt automatically. Manual run: `python app.py` still works if Flask is installed.
+
+**Reset to demo data** asks you to type YES, saves the current data as `inventory.before-reset-<date>.db`, then does the same as `python seed.py`.
 The app prints its address (http://127.0.0.1:5000, or the next free port if 5000 is busy) and the location of its data file.
 
 - **Your data is kept in this folder**, in `inventory.db`. Launching never deletes it. To move the project, move the whole folder, data included.
@@ -18,6 +30,8 @@ The app prints its address (http://127.0.0.1:5000, or the next free port if 5000
 ## Files
 | File | Purpose |
 |---|---|
+| `start.*`, `reset-demo-data.*`, `scripts/` | Launchers per OS: dependency check/install, venv, start, demo reset |
+| `requirements.txt` | Python packages (Flask) |
 | `app.py` | Backend: routes, input validation, CSV export (no SQL) |
 | `queries.py` | Database layer: every SQL statement (filters, saves, dashboard figures) |
 | `db.py` | SQLite connection + schema creation |

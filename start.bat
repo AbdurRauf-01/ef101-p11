@@ -1,5 +1,4 @@
 @echo off
-REM Double-click on Windows: starts the Hardware Inventory from this folder (data stays in this folder).
-cd /d "%~dp0"
-python app.py
-pause
+REM Double-click on Windows: installs what is missing (Python, packages), then starts the Hardware Inventory.
+REM Your data stays in this folder (inventory.db) and is never deleted by launching.
+call "%~dp0scripts\bootstrap.bat" start
