@@ -1,0 +1,14 @@
+What changed:
+
+1. migrate.py no longer loses data. It now recognises a v15 database and keeps everything exactly as it was. It checks row counts, integrity and foreign keys before replacing your database, and it does nothing if you run it again. Older databases (version 8–13) still get the old clean-up. The README upgrade section is rewritten to match.
+
+2. A cost of 0 now saves when closing a fault. A typed 0 is stored as 0 on both the Edit form and the Log form, and a blank box keeps the current total. Fixing this also exposed a related bug: on the Edit form, a blank cost lost the total, because it was cleared before the closing step read it. That is fixed too.
+
+3. Steps no longer carry a cost.
+- Cost: The cost of an open fault is one number, the Updated Cost on the asset.
+- Cost-only edits: Changing only the cost updates the total and adds no “Cost only” step.
+- Pages: The Steps table and the step edit page no longer show a cost.
+
+5. The schema diagram (SVG and PNG) is regenerated. It now shows all four tables, the current-fault columns, and the correct check count of 192.
+
+6. start.command is now executable in the zip.

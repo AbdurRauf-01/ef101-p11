@@ -6,14 +6,14 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 ![Project schema](docs/project-schema.png)
 
 ## Run
-Start the app with `python app.py`, or double-click `start.command` (macOS) / `start.bat` (Windows).
+Start the app with `python app.py`, or double-click `start.command` (macOS) / `start.bat` (Windows). On macOS, `start.command` is already executable; if your copy lost that (for example after being copied through some cloud drives), run `chmod +x start.command` once.
 The app prints its address (http://127.0.0.1:5000, or the next free port if 5000 is busy) and the location of its data file.
 
 - **Your data is kept in this folder**, in `inventory.db`. Launching never deletes it. To move the project, move the whole folder, data included.
 - **First launch:** an empty database is created with the six standard places. Add assets from the app.
 - **Demo data (optional):** `python seed.py` replaces the data with 40 demo assets. It asks you to type YES first when there is data.
 - **Several copies at once:** each copy has its own data file and its own address, so you can run an older version (for example v7) next to this one to compare.
-- **Tests:** `python test_app.py` runs 177 checks on a temporary database and prints a results table.
+- **Tests:** `python test_app.py` runs 192 checks on a temporary database and prints a results table.
 
 ## Files
 | File | Purpose |
@@ -21,17 +21,21 @@ The app prints its address (http://127.0.0.1:5000, or the next free port if 5000
 | `app.py` | Backend: routes, input validation, CSV export (no SQL) |
 | `queries.py` | Database layer: every SQL statement (filters, saves, dashboard figures) |
 | `db.py` | SQLite connection + schema creation |
-| `schema.sql` | `assets` and `maintenance` tables (1 asset : many events) |
+| `schema.sql` | The four tables: `locations`, `assets`, `fault_steps` (steps of an open fault) and `maintenance` (history) |
 | `seed.py` | Demo data generator (fixed random seed, reproducible) |
-| `migrate.py` | Upgrades an existing `inventory.db` to the current version without losing data (backup kept) |
+| `migrate.py` | Upgrades an older `inventory.db` to the current version without losing data (backup kept, safe to run twice) |
 | `test_app.py` | Test evidence (add, edit, retire, invalid input, duplicates, filters, history, dashboard, export) |
 | `templates/`, `static/` | HTML (Jinja) pages and the stylesheet |
 
 ## Upgrading an existing database
-If you already have an `inventory.db` from an earlier version (version 8 or later), run `python migrate.py` once. It removes incomplete history entries (a blank or Unknown field), turns valid entries logged while a fault was open into its steps, and lists anything it could not resolve. It copies every row into the current structure, keeps a backup as `inventory.db.bak`, and reports any IP addresses it had to assign.
+Only needed if you already have an `inventory.db` from an older version. This version ships with its own up-to-date `inventory.db`, so a fresh copy needs nothing.
+
+Run `python migrate.py` once (or `python migrate.py path/to/inventory.db`). It keeps a backup as `inventory.db.bak` first, checks the new database (row counts, integrity, foreign keys) before replacing the old one, and does nothing if the database is already up to date (running it twice is safe).
+- **From version 14-15.x** (the database already has `fault_steps`): everything is kept exactly as it is: assets, places and their range numbers, IP addresses, history, and the steps of open faults. The only change is that steps no longer carry a cost. The cost of an open fault stays on the asset as its single Updated Cost (if an open fault had none, the cost of its last step becomes the Updated Cost). Old steps that only held a cost (no action) are removed.
+- **From version 8-13** (no `fault_steps` table): incomplete history entries (a blank or Unknown field) are removed, valid entries logged while a fault was open become its steps, invalid or repeated IP addresses are left as Not Assigned, and everything removed or changed is listed on screen.
 
 ## Rules to document in the report
-- **Cost**: A single *Updated Cost* ($) box is used across all forms. Rather than forcing price stacking on intermediate steps, the inputer directly controls the current total cost. When a fault is closed to Operational, the final maintenance history entry records this Updated Cost.
+- **Cost**: A single *Updated Cost* ($) box is used across all forms. Rather than forcing price stacking on intermediate steps, the inputer directly controls the current total cost. When a fault is closed to Operational, the final maintenance history entry records this Updated Cost. A typed `0` is a real cost of 0 and is saved as 0 (on the Edit form and on the Log form); a blank box keeps the current total.
 - **Editable records**: To fix grammatical mistakes or typos, all items in *Maintenance history*, *Current fault*, and open fault steps can be edited directly.
 - **Asset IDs**: Auto-generated from the chosen location (e.g. `L1-PC-041`) if not manually entered. The user can enter a custom Asset ID or simply select the place to have the next available ID assigned automatically.
 - **GPU VRAM**: The GPU VRAM input is dynamically displayed only when a dedicated GPU is entered. For machines with integrated graphics (blank GPU), the VRAM field is hidden.
@@ -39,7 +43,7 @@ If you already have an `inventory.db` from an earlier version (version 8 or late
 - **IP addresses**: optional. A blank IP is shown as Not Assigned; nothing is assigned automatically. Two PCs in the same place can never share an IP (a PC's IP is checked against the others in its place); different places may share one.
 - **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately in the dashboard's Fault history, whatever the status.
 - **Current fault**: while a PC is Faulty or Under Repair, its fault (category, description, actions to be taken, technician, date, updated cost) is shown in its Current fault section. Nothing is written to the history while the fault is open. Under Repair requires a technician. A blank category is saved as Unknown.
-- **Steps of an open fault**: each save with a new action adds an audit step (its date, action, technician and cost). The steps are listed under Current fault.
+- **Steps of an open fault**: each save with a new action adds an audit step (its date, action and technician). A step has no cost of its own: the cost of the open fault is the single Updated Cost, so correcting the cost changes the total and adds no step. The steps are listed under Current fault.
 - **Closing a fault**: the PC is closed by setting it to Operational. Every fault field (category other than Unknown, description, action taken, technician) and the date are required; the cost is optional. The fault is then written to the history as ONE entry: its Action taken lists every step with its date, and its cost is the single Updated Cost.
 - **Sorting**: the asset list sorts by any column (click a heading; click again to reverse). The Status heading cycles which status comes first: Operational (green), Under Repair (yellow), Faulty (red); the other statuses follow alphabetically. The default is Asset ID, ascending.
 - **Fault categories**: maintenance events use a fixed drop-down (Disk failure, Overheating, Network issue, RAM fault, OS corruption, Display issue, PSU failure, Other, Unknown). The failure chart always shows every category; anything unexpected is counted as Other.

@@ -190,12 +190,20 @@ def parse_cost(text):
         return 0.0, "Cost must be a number, zero or more."
 
 
+def parse_optional_cost(text):
+    """Returns (cost, error). A blank box gives (None, None): 'keep the current Updated Cost'.
+    A typed 0 is a real cost of 0."""
+    if text is None or str(text).strip() == "":
+        return None, None
+    return parse_cost(text)
+
+
 def fault_box(form):
     """The Current fault box on the Edit / Add form, as typed, plus its date and cost."""
     box = {k: (form.get(k) or "").strip() for k in
            ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "cost"]}
     box["date"] = parse_date(box["fault_date"])
-    box["cost"], box["cost_error"] = parse_cost(box["cost"])     # single Updated Cost
+    box["cost"], box["cost_error"] = parse_optional_cost(box["cost"])   # single Updated Cost; None = blank
     return box
 
 
@@ -215,12 +223,12 @@ def box_problems(box, closing):
 
 
 def first_step(box, was_open, prev_action):
-    """The step to save for a submit, or None when nothing is new: a changed action, or a cost."""
-    changed = bool(box["status_action"]) and box["status_action"] != (prev_action or "")
-    if not changed and box["cost"] <= 0:
+    """The step to save for a submit, or None when nothing is new. Only a changed action is a step:
+    a change of the cost alone updates the Updated Cost and adds no step."""
+    if not box["status_action"] or box["status_action"] == (prev_action or ""):
         return None
-    return {"step_date": box["date"].isoformat(), "action": box["status_action"] if changed else "",
-            "technician": box["status_technician"], "cost": box["cost"]}
+    return {"step_date": box["date"].isoformat(), "action": box["status_action"],
+            "technician": box["status_technician"]}
 
 
 def validate_asset(f, is_new, subnet, prev=None):
@@ -360,7 +368,7 @@ def asset_new():
         step = None
         if opens:
             c["status_date"] = box["date"].isoformat()
-            c["status_cost"] = box["cost"]
+            c["status_cost"] = box["cost"] if box["cost"] is not None else 0.0
             step = first_step(box, was_open=False, prev_action=None)
         try:
             if is_new_loc:
@@ -429,7 +437,10 @@ def asset_edit(asset_id):
         if c["status"] in CURRENT_ERROR_STATUSES:
             if not was_open:
                 c["status_date"] = box["date"].isoformat()     # the fault starts on this date
-            c["status_cost"] = box["cost"]
+            if box["cost"] is not None:
+                c["status_cost"] = box["cost"]                 # typed, 0 included
+            else:                                              # blank: keep the current Updated Cost
+                c["status_cost"] = float(a["status_cost"] or 0) if was_open else 0.0
             step = first_step(box, was_open=was_open, prev_action=a["status_action"] if was_open else None)
         queries.update_asset(asset_id, c, step=step)
         flash("Asset updated.", "success")
@@ -497,21 +508,18 @@ def step_edit(step_id):
     if not s:
         return render_template("message.html", title="Step not found", text=f"No step with ID {step_id}"), 404
     if request.method == "POST":
-        f = {k: (request.form.get(k) or "").strip() for k in ["step_date", "action", "technician", "cost"]}
+        f = {k: (request.form.get(k) or "").strip() for k in ["step_date", "action", "technician"]}
         errors = []
         d = parse_date(f["step_date"])
         if not d:
             errors.append("Step date must be a valid date (YYYY-MM-DD).")
         elif d > date.today():
             errors.append("Step date cannot be in the future.")
-        cost, cost_error = parse_cost(f["cost"])
-        if cost_error:
-            errors.append(cost_error)
         if errors:
             for e in errors:
                 flash(e, "danger")
             return render_template("step_edit.html", s=dict(s, **f))
-        queries.update_step(step_id, f["step_date"], f["action"], f["technician"], cost)
+        queries.update_step(step_id, f["step_date"], f["action"], f["technician"])
         flash("Fault step updated.", "success")
         return redirect(url_for("asset_detail", asset_id=s["asset_id"]))
     return render_template("step_edit.html", s=dict(s))
@@ -597,15 +605,9 @@ def maintenance_add(asset_id):
         errors.append("Choose the status the asset will have: Operational, Faulty or Under Repair.")
     if f["fault_category"] and f["fault_category"] not in FAULT_CATEGORIES:
         errors.append("Choose a fault category from the list.")
-    cost_error = None
     was_open = asset["status"] in CURRENT_ERROR_STATUSES
-    open_cost = queries.open_fault_cost(asset_id) if was_open else 0.0
-    if f.get("cost") is not None and str(f.get("cost")).strip() != "":
-        updated_cost, cost_error = parse_cost(f["cost"])
-    elif was_open and open_cost > 0:
-        updated_cost = open_cost
-    else:
-        updated_cost, cost_error = parse_cost(f.get("cost") or "0")
+    # A typed cost (0 included) is used as it is. A blank box gives None: the open fault keeps its cost.
+    updated_cost, cost_error = parse_optional_cost(f["cost"])
     if cost_error:
         errors.append(cost_error)
     if new_status == "Operational":

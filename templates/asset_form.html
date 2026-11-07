@@ -128,7 +128,7 @@
   syncGpu();
 })();
 // The fault box follows the status:
-// - Faulty: everything optional (a step is saved when there is a new action or a cost).
+// - Faulty: everything optional (a step is saved when there is a new action; the cost is the single Updated Cost).
 // - Under Repair: the technician is required.
 // - Faulty / Under Repair -> Operational: the fault closes; every fault field, the date and the cost are used,
 //   and every fault field is required. The server refuses to save without them.

@@ -459,7 +459,7 @@ check("Open fault is not in the history yet", "log fault, status Faulty",
       and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-1' AND action='Replaced faulty PSU'") == 1)
 client.post("/assets/HIST-1/maintenance", data={"event_date": "2026-03-05", "fault_category": "PSU failure",
             "fault_description": "Will not power on", "action_taken": "Swapped in new PSU unit", "technician": "Ali",
-            "cost": "0", "set_status": "Operational"})
+            "cost": "", "set_status": "Operational"})
 check("Closing writes one history entry with every step", "log the fix, status Operational",
       "one entry; action lists both steps; cost is the total; steps cleared",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-1'") == 1
@@ -666,8 +666,9 @@ check("Unchanged action on the Edit form adds nothing", "Step B again, cost 0", 
 client.post("/assets/STEP-1/edit", data={**GOOD, "asset_id": "STEP-1", "status": "Under Repair", "status_category": "RAM fault",
             "status_detail": "Memory errors", "status_action": "Step B", "status_technician": "Ali",
             "fault_date": "2026-04-03", "cost": "5"})
-check("A cost alone is a step without repeating the action", "same action, cost 5", "cost-only step (action blank)",
-      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1' AND action='' AND cost_usd=5") == 1)
+check("A cost alone changes the total, not the steps", "same action, cost 5", "no new step; Updated Cost is 5",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 2
+      and count("SELECT status_cost FROM assets WHERE asset_id='STEP-1'") == 5)
 client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-05", "fault_category": "RAM fault",
             "fault_description": "Memory errors", "action_taken": "Step C", "technician": "Ali",
             "cost": "17", "set_status": "Operational"})
@@ -783,6 +784,174 @@ free = appmod.free_port(start=busy_port, tries=50)
 busy.close()
 check("Busy port is skipped", f"port {busy_port} already in use", "a different free port",
       free != busy_port and free > busy_port)
+
+# 21. Cost of 0, blank cost, and steps without a cost
+import shutil
+import subprocess
+
+OPEN = dict(status="Faulty", status_category="Disk failure", status_detail="Drive dead", status_action="Ordered drive",
+            status_technician="Ali", fault_date="2026-06-01")
+CLOSE = dict(status="Operational", status_category="Disk failure", status_detail="Drive dead",
+             status_action="Replaced drive", status_technician="Ali", fault_date="2026-06-05")
+
+
+def open_fault(aid, cost):
+    client.post("/assets/new", data={**GOOD, "asset_id": aid})
+    client.post(f"/assets/{aid}/edit", data={**GOOD, "asset_id": aid, **OPEN, "cost": cost})
+
+
+def log_close(aid, cost):
+    client.post(f"/assets/{aid}/maintenance", data={"event_date": "2026-06-05", "fault_category": "Disk failure",
+                "fault_description": "Drive dead", "action_taken": "Replaced drive", "technician": "Ali",
+                "cost": cost, "set_status": "Operational"})
+
+
+def history_cost(aid):
+    rows = count_rows(f"SELECT cost_usd FROM maintenance WHERE asset_id='{aid}'")
+    return [r[0] for r in rows]
+
+
+open_fault("ZERO-1", "35")
+client.post("/assets/ZERO-1/edit", data={**GOOD, "asset_id": "ZERO-1", **CLOSE, "cost": "0"})
+check("Closing on the Edit form with a cost of 0", "open fault with $35, close with cost 0",
+      "history entry costs exactly 0 (not the old 35)", history_cost("ZERO-1") == [0.0])
+open_fault("ZERO-2", "35")
+log_close("ZERO-2", "0")
+check("Closing on the Log form with a cost of 0", "open fault with $35, close with cost 0",
+      "history entry costs exactly 0 (not the old 35)", history_cost("ZERO-2") == [0.0])
+open_fault("BLANK-1", "35")
+client.post("/assets/BLANK-1/edit", data={**GOOD, "asset_id": "BLANK-1", **CLOSE, "cost": ""})
+open_fault("BLANK-2", "35")
+log_close("BLANK-2", "")
+check("A blank cost keeps the current total when closing", "close on both forms with the cost box empty",
+      "history entries cost 35", history_cost("BLANK-1") == [35.0] and history_cost("BLANK-2") == [35.0])
+open_fault("ZERO-3", "35")
+client.post("/assets/ZERO-3/edit", data={**GOOD, "asset_id": "ZERO-3", **OPEN, "cost": "0"})
+z3 = count("SELECT status_cost FROM assets WHERE asset_id='ZERO-3'")
+client.post("/assets/ZERO-3/edit", data={**GOOD, "asset_id": "ZERO-3", **OPEN, "cost": ""})
+check("Saving an open fault: 0 is saved, blank keeps the total",
+      "cost 0, then cost blank", "total becomes 0 and stays 0",
+      z3 == 0 and count("SELECT status_cost FROM assets WHERE asset_id='ZERO-3'") == 0)
+open_fault("ZERO-4", "35")
+client.post("/assets/ZERO-4/maintenance", data={"event_date": "2026-06-02", "fault_category": "Disk failure",
+            "fault_description": "Drive dead", "action_taken": "Ordered drive", "technician": "Ali",
+            "cost": "0", "set_status": "Under Repair"})
+z4 = count("SELECT status_cost FROM assets WHERE asset_id='ZERO-4'")
+open_fault("BLANK-3", "35")
+client.post("/assets/BLANK-3/maintenance", data={"event_date": "2026-06-02", "fault_category": "Disk failure",
+            "fault_description": "Drive dead", "action_taken": "Ordered drive", "technician": "Ali",
+            "cost": "", "set_status": "Under Repair"})
+check("Log form on an open fault: 0 is saved, blank keeps the total", "cost 0 / cost blank",
+      "total 0 / total stays 35", z4 == 0 and count("SELECT status_cost FROM assets WHERE asset_id='BLANK-3'") == 35)
+
+# steps carry no cost
+step_cols = [r[1] for r in count_rows("PRAGMA table_info(fault_steps)")]
+check("Steps have no cost column", "PRAGMA table_info(fault_steps)", "no cost_usd",
+      "cost_usd" not in step_cols and "action" in step_cols)
+open_fault("NOSTEP-1", "70")
+client.post("/assets/NOSTEP-1/edit", data={**GOOD, "asset_id": "NOSTEP-1", **OPEN, "status_action": "Changed CPU", "cost": "70"})
+client.post("/assets/NOSTEP-1/edit", data={**GOOD, "asset_id": "NOSTEP-1", **OPEN, "status_action": "Changed RAM", "cost": "50"})
+n_before = count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='NOSTEP-1'")
+client.post("/assets/NOSTEP-1/edit", data={**GOOD, "asset_id": "NOSTEP-1", **OPEN, "status_action": "Changed RAM", "cost": "35"})
+check("Correcting only the cost adds no step", "Updated Cost 50 -> 35, same action",
+      "steps unchanged; total 35", n_before == 3 and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='NOSTEP-1'") == 3
+      and count("SELECT status_cost FROM assets WHERE asset_id='NOSTEP-1'") == 35)
+page = client.get("/assets/NOSTEP-1").get_data(as_text=True)
+steps_html = page[page.index("Steps so far"):page.index("Maintenance history")]
+check("Steps table shows no amounts", "GET /assets/NOSTEP-1 after the correction",
+      "steps listed without cost; headline total $35.00",
+      "$" not in steps_html and "Changed CPU" in steps_html and "Changed RAM" in steps_html
+      and "Cost only" not in steps_html and "$35.00" in page)
+sid = count("SELECT id FROM fault_steps WHERE asset_id='NOSTEP-1' ORDER BY id LIMIT 1")
+step_page = client.get(f"/steps/{sid}/edit").get_data(as_text=True)
+client.post(f"/steps/{sid}/edit", data={"step_date": "2026-06-01", "action": "Changed CPU (i5)", "technician": "Sam"})
+client.post(f"/steps/{sid}/delete")
+check("Step edit page has no cost; edit and delete keep the total", "edit step, then delete it",
+      "no cost box; total still 35",
+      'name="cost"' not in step_page and count("SELECT status_cost FROM assets WHERE asset_id='NOSTEP-1'") == 35
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='NOSTEP-1'") == 2)
+
+# migrate.py on copies of an old database
+BASE_DIR = Path(__file__).resolve().parent
+OLD_STEPS = ("DROP TABLE fault_steps; CREATE TABLE fault_steps (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+             "asset_id TEXT NOT NULL REFERENCES assets(asset_id), step_date TEXT NOT NULL, action TEXT NOT NULL, "
+             "technician TEXT NOT NULL, cost_usd REAL NOT NULL DEFAULT 0);")
+
+
+def old_version_db(name, with_steps=True):
+    """A database in the v15.3 shape: open fault with steps that carry costs, plus a history entry on the same day."""
+    path = TMP.parent / name
+    shutil.copy(BASE_DIR / "schema.sql", TMP.parent / "schema_copy.sql")
+    con = sqlite3.connect(path)
+    con.executescript((BASE_DIR / "schema.sql").read_text(encoding="utf-8"))
+    con.execute("INSERT INTO locations (name,prefix,ip_subnet) VALUES ('Lab 1','L1',7)")
+    base = ("INSERT INTO assets (asset_id,manufacturer,model,cpu,cpu_family,ram_gb,ram_type,storage_type,storage_gb,os,"
+            "ip_address,location,purchase_date,warranty_expiry,status,status_category,status_detail,status_action,"
+            "status_technician,status_date,status_cost) VALUES (?, 'Dell','X','i5','Core i5',16,'DDR4','SSD',512,'Win',"
+            "?, 'Lab 1','2024-01-01','2027-01-01',?,?,?,?,?,?,?)")
+    con.execute(base, ("L1-PC-001", "192.168.7.5", "Faulty", "RAM fault", "Bad RAM", "Changed RAM", "Ali", "2026-06-01", 35.0))
+    con.execute(base, ("L1-PC-002", None, "Faulty", "Disk failure", "Dead", "Ordered disk", "Ali", "2026-06-01", None))
+    con.execute(base, ("L1-PC-003", None, "Operational", None, None, None, None, None, None))
+    con.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,action_taken,technician,cost_usd) "
+                "VALUES ('L1-PC-001','2026-06-01','PSU failure','Old PSU','Swapped PSU','Sam',90)")
+    if with_steps:
+        con.executescript(OLD_STEPS)
+        con.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician,cost_usd) VALUES ('L1-PC-001','2026-06-01','Changed CPU','Ali',70)")
+        con.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician,cost_usd) VALUES ('L1-PC-001','2026-06-02','Changed RAM','Ali',50)")
+        con.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician,cost_usd) VALUES ('L1-PC-001','2026-06-03','','Ali',35)")
+        con.execute("INSERT INTO fault_steps (asset_id,step_date,action,technician,cost_usd) VALUES ('L1-PC-002','2026-06-02','Ordered disk','Ali',44)")
+    else:
+        con.executescript("DROP TABLE fault_steps;")
+    con.commit()
+    con.close()
+    return path
+
+
+def run_migrate(path):
+    return subprocess.run([sys.executable, str(BASE_DIR / "migrate.py"), str(path)], capture_output=True, text=True)
+
+
+def rows_of(path, sql):
+    con = sqlite3.connect(path)
+    out = con.execute(sql).fetchall()
+    con.close()
+    return out
+
+
+mp = old_version_db("old15.db")
+res = run_migrate(mp)
+steps_after = rows_of(mp, "SELECT id,asset_id,step_date,action,technician FROM fault_steps ORDER BY id")
+check("migrate.py keeps every step of a v15 database", "open fault with CPU and RAM steps + a cost-only step",
+      "CPU and RAM steps kept (same ids/text); only the cost-only step removed; disk step kept",
+      res.returncode == 0 and [(r[0], r[3]) for r in steps_after] == [(1, "Changed CPU"), (2, "Changed RAM"), (4, "Ordered disk")])
+check("migrate.py keeps history and the open-fault totals", "same-day history entry; totals 35 and none",
+      "history entry stays; totals 35 and 44 (last step cost when no total); range number 7 kept",
+      rows_of(mp, "SELECT action_taken,cost_usd FROM maintenance") == [("Swapped PSU", 90.0)]
+      and rows_of(mp, "SELECT status_cost FROM assets WHERE asset_id='L1-PC-001'") == [(35.0,)]
+      and rows_of(mp, "SELECT status_cost FROM assets WHERE asset_id='L1-PC-002'") == [(44.0,)]
+      and rows_of(mp, "SELECT ip_subnet FROM locations") == [(7,)]
+      and rows_of(mp, "SELECT ip_address FROM assets WHERE asset_id='L1-PC-001'") == [("192.168.7.5",)])
+check("migrate.py output has the new structure and a backup", "PRAGMA table_info(fault_steps); .bak file",
+      "no cost_usd; inventory.db.bak exists",
+      "cost_usd" not in [r[1] for r in rows_of(mp, "PRAGMA table_info(fault_steps)")] and (mp.parent / "old15.db.bak").exists())
+bak_before = (mp.parent / "old15.db.bak").read_bytes()
+res2 = run_migrate(mp)
+check("migrate.py is safe to run twice", "run it again on the migrated database", "says up to date; backup untouched",
+      res2.returncode == 0 and "up to date" in res2.stdout and (mp.parent / "old15.db.bak").read_bytes() == bak_before)
+lp = old_version_db("old8.db", with_steps=False)
+res3 = run_migrate(lp)
+check("migrate.py still upgrades a version without steps", "no fault_steps table; entry logged while the PC was open",
+      "entry becomes a step; its $90 becomes the total when there was none",
+      res3.returncode == 0 and rows_of(lp, "SELECT action FROM fault_steps ORDER BY id")[0][0] in ("Swapped PSU", "Changed RAM")
+      and rows_of(lp, "SELECT COUNT(*) FROM maintenance")[0][0] == 0
+      and rows_of(lp, "SELECT status_cost FROM assets WHERE asset_id='L1-PC-002'") == [(0.0,)])
+
+# the shipped database is already in the current structure
+shipped = sqlite3.connect(BASE_DIR / "inventory.db")
+ship_cols = [r[1] for r in shipped.execute("PRAGMA table_info(fault_steps)")]
+shipped.close()
+check("Shipped inventory.db has the current structure", "PRAGMA table_info(fault_steps) on inventory.db",
+      "no cost_usd column", "cost_usd" not in ship_cols and len(ship_cols) > 0)
 
 # seeding asks before it erases data (the answer is checked by typing YES)
 

@@ -1,6 +1,7 @@
 -- EF101-P11 Hardware Asset Inventory: database schema (SQLite)
 -- locations (1) -- (N) assets (1) -- (N) maintenance
 -- assets (1) -- (N) fault_steps: the work done while a fault is open (one history entry is written when it closes)
+-- The cost of an open fault is ONE number: assets.status_cost (Updated Cost). Steps carry no cost.
 -- Running this file wipes and recreates all tables.
 
 DROP TABLE IF EXISTS fault_steps;
@@ -66,13 +67,13 @@ CREATE INDEX idx_maint_asset ON maintenance(asset_id);
 
 -- Steps of an open fault (Faulty / Under Repair). They are not history yet: when the PC is Operational
 -- again, all steps are combined into the Action taken of ONE maintenance entry and this table is emptied.
+-- A step has no cost: the cost of the open fault is the single Updated Cost in assets.status_cost.
 CREATE TABLE fault_steps (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id    TEXT NOT NULL REFERENCES assets(asset_id),
     step_date   TEXT NOT NULL,                        -- ISO date of the step
-    action      TEXT NOT NULL,                        -- what was done ('' = cost only)
-    technician  TEXT NOT NULL,                        -- who did it ('' = not recorded)
-    cost_usd    REAL NOT NULL DEFAULT 0 CHECK (cost_usd >= 0)
+    action      TEXT NOT NULL,                        -- what was done
+    technician  TEXT NOT NULL                         -- who did it ('' = not recorded)
 );
 
 CREATE INDEX idx_steps_asset ON fault_steps(asset_id);
