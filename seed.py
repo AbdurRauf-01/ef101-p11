@@ -117,22 +117,28 @@ def main():
         a[15] = 0
         a[14] = "Faulty"
 
-    # Current error: every Faulty / Under Repair asset gets one; Operational assets stay NULL (shown N/A).
+    # Current fault: every Faulty / Under Repair asset gets one; Operational assets stay NULL (shown as "-").
+    # Each current fault is also a history entry, the same rule the app follows.
     current = {}
     for n, a in enumerate(x for x in assets if x[14] != "Operational"):
-        current[a[0]] = CURRENT_ERRORS[n % len(CURRENT_ERRORS)]
+        cat, detail = CURRENT_ERRORS[n % len(CURRENT_ERRORS)]
+        current[a[0]] = (cat, detail)
+        events.append([a[0], TODAY.isoformat(), cat, detail, "", "", 0])
     rows = []
     for a in assets:
-        cat, detail = current.get(a[0], (None, None))
+        cur = current.get(a[0])
         # RAM type: every CPU in the demo list supports DDR4, so DDR4 is used for all demo assets.
         ram_type = "DDR4"
         vram = GPU_VRAM.get(a[8]) if a[8] else None
+        cat, detail = cur if cur else (None, None)
+        action, tech, when = ("", "", TODAY.isoformat()) if cur else (None, None, None)
         rows.append([a[0], a[1], a[2], a[3], a[4], a[5], ram_type, a[6], a[7], a[8], vram, a[9], a[10],
-                     a[11], a[12], a[13], a[14], cat, detail, a[15]])
+                     a[11], a[12], a[13], a[14], cat, detail, action, tech, when, a[15]])
     conn.executemany(
         "INSERT INTO assets (asset_id,manufacturer,model,cpu,cpu_family,ram_gb,ram_type,storage_type,"
         "storage_gb,gpu,gpu_vram_gb,os,ip_address,location,purchase_date,warranty_expiry,status,status_category,"
-        "status_detail,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        "status_detail,status_action,status_technician,status_date,active) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     conn.executemany(
         "INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
         "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)", events)

@@ -15,6 +15,8 @@ from collections import defaultdict
 from pathlib import Path
 
 import queries  # pick_ip: the same IP rule the app and seed.py use
+from datetime import date
+from queries import FAULT_CATEGORIES
 
 BASE = Path(__file__).resolve().parent
 DB = BASE / "inventory.db"
@@ -42,6 +44,20 @@ def main():
     places = [(r["name"], r["prefix"]) for r in old.execute("SELECT name, prefix FROM locations ORDER BY rowid")]
     subnet = {name: i + 1 for i, (name, _) in enumerate(places)}
     assets = [dict(r) for r in old.execute("SELECT * FROM assets ORDER BY asset_id")]
+    # Current fault fields (version 7): Operational = all NULL; a faulty PC keeps its category and details.
+    # Old 'N/A' categories become 'Unknown'. Blank technician / action = not recorded. Date = the migration day
+    # when it is not known. No history entries are invented for faults that already existed.
+    for a in assets:
+        if a["status"] == "Operational":
+            for k in ["status_category", "status_detail", "status_action", "status_technician", "status_date"]:
+                a[k] = None
+        else:
+            if a.get("status_category") not in FAULT_CATEGORIES:
+                a["status_category"] = "Unknown"
+            a["status_detail"] = a.get("status_detail") or ""
+            a["status_action"] = a.get("status_action") or ""
+            a["status_technician"] = a.get("status_technician") or ""
+            a["status_date"] = a.get("status_date") or date.today().isoformat()
     events = [dict(r) for r in old.execute("SELECT * FROM maintenance ORDER BY id")]
     old.close()
 

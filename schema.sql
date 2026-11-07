@@ -7,38 +7,43 @@ DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS locations;
 
 CREATE TABLE locations (
-    name    TEXT PRIMARY KEY,                 -- shown in the drop-down, e.g. Lab 1
-    prefix  TEXT NOT NULL UNIQUE,             -- start of automatic asset IDs, e.g. L1 -> L1-PC-001
-    ip_subnet INTEGER NOT NULL UNIQUE         -- x in the place's IP range 192.168.x.n (1..254)
+    name      TEXT PRIMARY KEY,                 -- shown in the drop-down, e.g. Lab 1
+    prefix    TEXT NOT NULL UNIQUE,             -- start of automatic asset IDs, e.g. L1 -> L1-PC-001
+    ip_subnet INTEGER NOT NULL UNIQUE           -- x in the place's IP range 192.168.x.n (1..254)
               CHECK (ip_subnet BETWEEN 1 AND 254)
 );
 
 CREATE TABLE assets (
-    asset_id        TEXT PRIMARY KEY,                 -- permanent identity, e.g. L1-PC-001
-    manufacturer    TEXT NOT NULL,
-    model           TEXT NOT NULL,
-    cpu             TEXT NOT NULL,                    -- full model, e.g. Intel Core i5-12400
-    cpu_family      TEXT NOT NULL,                    -- grouping used for filtering, e.g. Core i5
-    ram_gb          INTEGER NOT NULL CHECK (ram_gb > 0),
-    ram_type        TEXT NOT NULL CHECK (ram_type IN ('DDR1','DDR2','DDR3','DDR4','DDR5')),
-    storage_type    TEXT NOT NULL CHECK (storage_type IN ('SSD','HDD','NVMe','Hybrid')),
-    storage_gb      INTEGER NOT NULL CHECK (storage_gb > 0),
-    gpu             TEXT,                             -- NULL / empty = integrated only
-    gpu_vram_gb     INTEGER CHECK (gpu_vram_gb IS NULL OR gpu_vram_gb > 0),  -- GPU memory; NULL = no discrete GPU
-    os              TEXT NOT NULL,
-    ip_address      TEXT,                             -- changeable network address (NOT identity)
-    location        TEXT NOT NULL REFERENCES locations(name),
-    purchase_date   TEXT NOT NULL,                    -- ISO date YYYY-MM-DD
-    warranty_expiry TEXT NOT NULL,                    -- warranty status is COMPUTED from this
-    status          TEXT NOT NULL DEFAULT 'Operational'
-                    CHECK (status IN ('Operational','Faulty','Under Repair')),
-    status_category TEXT,                             -- current error category; NULL when Operational (shown N/A)
-    status_detail   TEXT,                             -- current error details; NULL when Operational
-    active          INTEGER NOT NULL DEFAULT 1,       -- 0 = retired (kept for history)
-    -- an Operational asset has no current error; a Faulty / Under Repair asset must state one
-    CHECK ((status = 'Operational' AND status_category IS NULL AND status_detail IS NULL)
-        OR (status <> 'Operational' AND status_category IS NOT NULL AND status_detail IS NOT NULL)),
-    UNIQUE (location, ip_address)                    -- no two PCs in one place share an IP
+    asset_id          TEXT PRIMARY KEY,                 -- permanent identity, e.g. L1-PC-001
+    manufacturer      TEXT NOT NULL,
+    model             TEXT NOT NULL,
+    cpu               TEXT NOT NULL,                    -- full model, e.g. Intel Core i5-12400
+    cpu_family        TEXT NOT NULL,                    -- grouping used for filtering, e.g. Core i5
+    ram_gb            INTEGER NOT NULL CHECK (ram_gb > 0),
+    ram_type          TEXT NOT NULL CHECK (ram_type IN ('DDR1','DDR2','DDR3','DDR4','DDR5')),
+    storage_type      TEXT NOT NULL CHECK (storage_type IN ('SSD','HDD','NVMe','Hybrid')),
+    storage_gb        INTEGER NOT NULL CHECK (storage_gb > 0),
+    gpu               TEXT,                             -- NULL / empty = integrated only
+    gpu_vram_gb       INTEGER CHECK (gpu_vram_gb IS NULL OR gpu_vram_gb > 0),
+    os                TEXT NOT NULL,
+    ip_address        TEXT,                             -- 192.168.x.n; unique inside a place
+    location          TEXT NOT NULL REFERENCES locations(name),
+    purchase_date     TEXT NOT NULL,                    -- ISO date YYYY-MM-DD
+    warranty_expiry   TEXT NOT NULL,                    -- warranty status is COMPUTED from this
+    status            TEXT NOT NULL DEFAULT 'Operational'
+                      CHECK (status IN ('Operational','Faulty','Under Repair')),
+    -- Current fault: filled while status is Faulty / Under Repair, all NULL when Operational
+    status_category   TEXT,                             -- fault category, 'Unknown' if not given
+    status_detail     TEXT,                             -- fault description ('' = not given)
+    status_action     TEXT,                             -- actions to be taken ('' = not decided)
+    status_technician TEXT,                             -- technician ('' = not assigned yet)
+    status_date       TEXT,                             -- date the fault was recorded (ISO)
+    active            INTEGER NOT NULL DEFAULT 1,       -- 0 = retired (kept for history)
+    CHECK ((status = 'Operational' AND status_category IS NULL AND status_detail IS NULL
+            AND status_action IS NULL AND status_technician IS NULL AND status_date IS NULL)
+        OR (status <> 'Operational' AND status_category IS NOT NULL AND status_detail IS NOT NULL
+            AND status_action IS NOT NULL AND status_technician IS NOT NULL AND status_date IS NOT NULL)),
+    UNIQUE (location, ip_address)                       -- no two PCs in one place share an IP
 );
 
 CREATE TABLE maintenance (
@@ -46,9 +51,9 @@ CREATE TABLE maintenance (
     asset_id          TEXT NOT NULL REFERENCES assets(asset_id),
     event_date        TEXT NOT NULL,
     fault_category    TEXT NOT NULL,                  -- one of the fault category drop-down options
-    fault_description TEXT NOT NULL,
-    action_taken      TEXT NOT NULL,
-    technician        TEXT NOT NULL,
+    fault_description TEXT NOT NULL,                  -- may be '' when not given
+    action_taken      TEXT NOT NULL,                  -- may be '' when not given
+    technician        TEXT NOT NULL,                  -- may be '' when not given
     cost_usd          REAL NOT NULL DEFAULT 0 CHECK (cost_usd >= 0)   -- US dollars
 );
 

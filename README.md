@@ -10,7 +10,7 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 pip install flask
 python seed.py        # optional: wipes and recreates inventory.db with demo data
 python app.py         # open http://127.0.0.1:5000
-python test_app.py    # runs 130 checks on a temporary database, prints a results table
+python test_app.py    # runs 142 checks on a temporary database, prints a results table
 ```
 No Internet is needed: the app uses no external libraries (plain CSS in `static/style.css`; dashboard charts are CSS bars).
 
@@ -27,12 +27,14 @@ No Internet is needed: the app uses no external libraries (plain CSS in `static/
 | `templates/`, `static/` | HTML (Jinja) pages and the stylesheet |
 
 ## Upgrading an existing database
-If you already have an `inventory.db` from an earlier version, run `python migrate.py` once. It copies every row into the current structure, keeps a backup as `inventory.db.bak`, and reports any IP addresses it had to assign.
+If you already have an `inventory.db` from an earlier version (version 6 or later), run `python migrate.py` once. It copies every row into the current structure, keeps a backup as `inventory.db.bak`, and reports any IP addresses it had to assign.
 
 ## Rules to document in the report
 - **IP addresses**: each place has a range number x, so its PCs use 192.168.x.n. Places are numbered in the order they were created (Lab 1 = 1 ... Library = 6); a new place gets the next number. Two PCs in the same place can never share an IP; different places may. If the IP box is left blank, the system uses the number at the end of the asset ID as the host number (L1-PC-004 -> 192.168.1.4), or the lowest free number if that one is taken.
 - **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately in the dashboard's Fault history, whatever the status.
-- **Current error**: a Faulty or Under Repair asset must choose an error category (the fault list plus N/A, Unknown, Other) and write the details (or `Unknown`). Operational assets show N/A. Set on the edit form or when logging an event.
+- **Current fault**: while an asset is Faulty or Under Repair, its fault (category, description, actions to be taken, technician, date) is shown in its Current fault section. All of these are optional on the Edit/Add form; a blank category is saved as Unknown. Each fault is also a history entry.
+- **Closing a fault**: the fix is logged on the asset's Log form (fault category other than Unknown, description, action and technician required). The fault details are pre-filled from the Current fault section. Setting a faulty asset to Operational on the Edit form keeps the fault open and moves it to that Log form.
+- **Sorting**: the asset list sorts by any column (click a heading; click again to reverse). The default is Asset ID ascending.
 - **Fault categories**: maintenance events use a fixed drop-down (Disk failure, Overheating, Network issue, RAM fault, OS corruption, Display issue, PSU failure, Other, Unknown). The failure chart always shows every category; anything unexpected is counted as Other.
 - **Locations**: a place is chosen from a drop-down, or added with **+ Add new location** (it then appears on the dashboard, even while empty). Each place has a short code (for example Lab 4 = `L4`).
 - **Asset IDs**: optional. If left blank, the next free ID for the chosen place is assigned (for example `LIB-PC-038`). Retired IDs are never reused.

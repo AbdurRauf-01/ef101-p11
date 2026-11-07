@@ -58,7 +58,7 @@
 <tr><td><a href="{{ url_for('asset_detail', asset_id=r.asset_id) }}">{{ r.asset_id }}</a></td>
 <td>{{ r.model }}</td><td>{{ r.location }}</td>
 <td><span class="badge b-{{ r.status|replace(' ', '-') }}">{{ r.status }}</span></td>
-<td>{{ r.status_category or 'Unknown' }}: {{ r.status_detail or 'Unknown' }}</td></tr>
+<td>{{ r.status_category or 'Unknown' }}: {{ r.status_detail or 'Not recorded' }}</td></tr>
 {% else %}
 <tr><td colspan="5" class="muted">No assets are currently faulty or under repair.</td></tr>
 {% endfor %}</table></div>

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ a.asset_id }}{% endblock %}
 {% block content %}
+{% set pref = a if a.status != 'Operational' else None %}
 <div class="row" style="justify-content:space-between">
   <h1>{{ a.asset_id }}
     {% if not a.active %}<span class="badge b-Retired">Retired</span>{% endif %}</h1>
@@ -33,7 +34,6 @@
 <div class="card"><h2>Status &amp; warranty</h2>
 <dl>
   <dt>Operational status</dt><dd><span class="badge b-{{ a.status|replace(' ', '-') }}">{{ a.status }}</span></dd>
-  <dt>Current error</dt><dd>{% if a.status == 'Operational' %}N/A{% else %}{{ a.status_category or 'Unknown' }}: {{ a.status_detail or 'Unknown' }}{% endif %}</dd>
   <dt>Purchase date</dt><dd>{{ a.purchase_date }}</dd>
   <dt>Warranty expiry</dt><dd>{{ a.warranty_expiry }} <span class="badge b-{{ warranty|replace(' ', '-') }}">{{ warranty }}</span></dd>
   <dt>Maintenance events</dt><dd>{{ events|length }}</dd>
@@ -41,33 +41,44 @@
 </dl></div>
 </div>
 
+<div class="card scroll"><h2>Current fault</h2>
+<table>
+<tr><th>Date</th><th>Category</th><th>Fault</th><th>Actions to be taken</th><th>Technician</th></tr>
+{% if a.status == 'Operational' %}
+<tr><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+{% else %}
+<tr><td>{{ a.status_date }}</td><td>{{ a.status_category }}</td>
+<td>{{ a.status_detail or 'Not recorded' }}</td><td>{{ a.status_action or 'Not recorded' }}</td>
+<td>{{ a.status_technician or 'Not recorded' }}</td></tr>
+{% endif %}
+</table></div>
+
 <div class="card scroll"><h2>Maintenance history</h2>
 <table>
 <tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
 {% for e in events %}
-<tr><td>{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description }}</td>
-<td>{{ e.action_taken }}</td><td>{{ e.technician }}</td><td class="right">{{ e.cost_usd|money }}</td></tr>
+<tr><td>{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description or 'Not recorded' }}</td>
+<td>{{ e.action_taken or 'Not recorded' }}</td><td>{{ e.technician or 'Not recorded' }}</td><td class="right">{{ e.cost_usd|money }}</td></tr>
 {% else %}
 <tr><td colspan="6" class="muted">No maintenance events recorded.</td></tr>
 {% endfor %}
 </table></div>
 
-<div class="card"><h2>Log a fault / maintenance event</h2>
+<div class="card" id="log-card"><h2>Log a fault / maintenance event</h2>
+{% if resolve %}<div class="flash success">Fixing this fault: the current fault details are filled in below. Complete the fields, choose Operational, then log the event.</div>{% endif %}
 <form method="post" action="{{ url_for('maintenance_add', asset_id=a.asset_id) }}" novalidate>
 <div class="formgrid">
   <div><label>Date *</label><input type="date" name="event_date" value="{{ today }}"></div>
   <div><label>Fault category *</label><select name="fault_category"><option value="">— choose —</option>
-    {% for o in fault_categories %}<option>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Fault description *</label><input name="fault_description"></div>
-  <div><label>Action taken *</label><input name="action_taken"></div>
-  <div><label>Technician *</label><input name="technician"></div>
+    {% for o in fault_categories %}<option{{ ' selected' if pref and pref.status_category==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Fault description *</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}"></div>
+  <div><label>Action taken *</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}"></div>
+  <div><label>Technician *</label><input name="technician" value="{{ pref.status_technician if pref else '' }}"></div>
   <div><label>Cost ($)</label><input name="cost" value="0"></div>
   <div><label>Update asset status to</label><select name="set_status"><option value="">(no change)</option>
-    <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
-  <div><label>Current error category (Faulty / Under Repair)</label><select name="status_category"><option value="">— choose —</option>
-    {% for o in error_categories %}<option>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Current error details (Faulty / Under Repair)</label><input name="status_detail" placeholder="Describe the fault, or Unknown"></div>
+    <option{{ ' selected' if resolve }}>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
 </div>
 <p><button class="btn" type="submit">Log event</button></p>
 </form></div>
+{% if resolve %}<script>document.getElementById('log-card').scrollIntoView();</script>{% endif %}
 {% endblock %}

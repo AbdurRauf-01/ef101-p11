@@ -96,3 +96,9 @@ details.more[open] .when-closed,details.more:not([open]) .when-open{display:none
 .done{color:var(--ok);font-weight:600}
 .formgrid>div{display:flex;flex-direction:column;gap:4px}
 .formgrid label{min-height:2.4em;line-height:1.2;display:flex;align-items:flex-end;margin-bottom:0}
+th a.sortlink{color:inherit;text-decoration:none;white-space:nowrap}
+th a.sortlink:hover{text-decoration:underline}
+.arrow{display:inline-block;width:1.1em;color:var(--accent)}
+.arrow.faint{color:var(--muted);opacity:.6}
+.fault-box{margin-top:16px;padding:12px 14px;border:1px dashed var(--line);border-radius:8px}
+.fault-box h3{margin:0 0 4px;font-size:.95rem}

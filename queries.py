@@ -22,7 +22,17 @@ WARRANTY_SOON_DAYS = 30
 # Columns of the assets table that a user can enter (active is handled separately)
 FIELDS = ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "ram_gb", "ram_type",
           "storage_type", "storage_gb", "gpu", "gpu_vram_gb", "os", "ip_address", "location",
-          "purchase_date", "warranty_expiry", "status", "status_category", "status_detail"]
+          "purchase_date", "warranty_expiry", "status", "status_category", "status_detail",
+          "status_action", "status_technician", "status_date"]
+CURRENT_FAULT_FIELDS = ["status_category", "status_detail", "status_action", "status_technician", "status_date"]
+
+# Asset list sorting: column key from the URL -> SQL expression. Anything else is ignored.
+SORT_COLUMNS = {
+    "asset_id": "a.asset_id", "model": "a.model", "cpu": "a.cpu", "ram": "a.ram_gb",
+    "storage": "a.storage_gb", "gpu": "a.gpu", "location": "a.location", "status": "a.status",
+    "warranty": "a.warranty_expiry",
+    "faults": "(SELECT COUNT(*) FROM maintenance m WHERE m.asset_id=a.asset_id)",
+}
 
 EVENT_FIELDS = ["id", "asset_id", "event_date", "fault_category", "fault_description",
                 "action_taken", "technician", "cost_usd"]
@@ -122,7 +132,9 @@ def filtered_assets(args):
         q += " AND a.warranty_expiry < date('now')"
     elif w == "Active":
         q += " AND a.warranty_expiry >= date('now')"
-    q += " ORDER BY a.asset_id"
+    col = SORT_COLUMNS.get(args.get("sort"), SORT_COLUMNS["asset_id"])
+    direction = "DESC" if args.get("dir") == "desc" else "ASC"
+    q += f" ORDER BY {col} {direction}, a.asset_id"       # column and direction come from fixed lists
     return get_db().execute(q, p).fetchall()
 
 
@@ -137,13 +149,23 @@ def filter_options():
 
 
 # ---- Assets: write ----------------------------------------------------------
-def insert_asset(c):
+def _record_fault(db, c):
+    """History entry for a fault recorded on the asset form (cost 0; the status itself is on the asset)."""
+    db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
+               "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
+               (c["asset_id"], c["status_date"], c["status_category"], c["status_detail"] or "",
+                c["status_action"] or "", c["status_technician"] or "", 0))
+
+
+def insert_asset(c, fault_record=False):
     """c = validated dict with every key in FIELDS. May raise sqlite3.IntegrityError
     (the transaction is rolled back and the connection closed first)."""
     db = get_db()
     try:
         db.execute(f"INSERT INTO assets ({','.join(FIELDS)}, active) VALUES ({','.join('?' * len(FIELDS))}, 1)",
                    [c[k] for k in FIELDS])
+        if fault_record:
+            _record_fault(db, c)
         db.commit()
     except Exception:
         db.rollback()
@@ -152,13 +174,15 @@ def insert_asset(c):
         db.close()
 
 
-def update_asset(asset_id, c):
+def update_asset(asset_id, c, fault_record=False):
     """The primary key (asset_id) is never changed."""
     db = get_db()
     try:
         sets = ",".join(f"{k}=?" for k in FIELDS if k != "asset_id")
         db.execute(f"UPDATE assets SET {sets} WHERE asset_id=?",
                    [c[k] for k in FIELDS if k != "asset_id"] + [asset_id])
+        if fault_record:
+            _record_fault(db, c)
         db.commit()
     except Exception:
         db.rollback()
@@ -186,17 +210,24 @@ def get_events(asset_id):
                             (asset_id,)).fetchall()
 
 
-def add_event(asset_id, f, cost, set_status=None, status_category=None, status_detail=None):
-    """Save one maintenance event; optionally change the asset's status and current error in the same commit."""
+def add_event(asset_id, f, cost, set_status=None, current=None):
+    """Save one maintenance event. set_status (optional) changes the asset's status in the same commit:
+    - 'Operational' clears the current fault (the fix has been logged);
+    - 'Faulty' / 'Under Repair' stores `current` (the fault: category, detail, action, technician, date)."""
     db = get_db()
     try:
         db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
                    "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
                    (asset_id, f["event_date"], f["fault_category"], f["fault_description"],
                     f["action_taken"], f["technician"], cost))
-        if set_status:
-            db.execute("UPDATE assets SET status=?, status_category=?, status_detail=? WHERE asset_id=?",
-                       (set_status, status_category, status_detail, asset_id))
+        if set_status == "Operational":
+            db.execute("UPDATE assets SET status='Operational', status_category=NULL, status_detail=NULL, "
+                       "status_action=NULL, status_technician=NULL, status_date=NULL WHERE asset_id=?", (asset_id,))
+        elif set_status in CURRENT_ERROR_STATUSES:
+            db.execute("UPDATE assets SET status=?, status_category=?, status_detail=?, status_action=?, "
+                       "status_technician=?, status_date=? WHERE asset_id=?",
+                       (set_status, current["category"], current["detail"], current["action"],
+                        current["technician"], current["date"], asset_id))
         db.commit()
     except Exception:
         db.rollback()

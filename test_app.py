@@ -2,6 +2,7 @@
 Uses a temporary database (your inventory.db is never touched) and prints a
 Test | Input | Expected | Result table you can paste into the report."""
 import csv
+import re
 import sqlite3
 import io
 import os
@@ -42,6 +43,13 @@ def fault(d):
     return {label: n for label, n, _ in d["fault_cats"]}
 
 
+def count_rows(sql):
+    c = db.get_db()
+    rows = c.execute(sql).fetchall()
+    c.close()
+    return rows
+
+
 def sums_match_total(d):
     """Every distribution chart must add up to the number of active assets."""
     return all(sum(n for _, n, _ in rows) == d["stats"]["total"] for rows in d["charts"].values())
@@ -80,9 +88,7 @@ bad_cases = {
     "Unknown RAM type": {"ram_type": "DDR6"},
     "GPU without VRAM": {"gpu": "NVIDIA RTX 3060", "gpu_vram_gb": ""},
     "Unknown location": {"location": "Mars"},
-    "Faulty, no category": {"status": "Faulty", "status_category": "", "status_detail": "x"},
     "Faulty, category not in list": {"status": "Faulty", "status_category": "Gremlins", "status_detail": "x"},
-    "Faulty, no details": {"status": "Faulty", "status_category": "Unknown", "status_detail": ""},
 }
 for i, (label, change) in enumerate(bad_cases.items()):
     form = {**GOOD, **change, "asset_id": f"BAD-{i}"}
@@ -124,40 +130,55 @@ check("Invalid event rejected", "negative cost / future date / unknown category"
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1
       and count("SELECT COUNT(*) FROM maintenance WHERE fault_description='bogus'") == 0)
 
-# 6b. Current-error rules: Faulty / Under Repair need a category AND details; Operational shows N/A
-client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Faulty", "status_category": "",
-                                                    "status_detail": "", "fault_description": "no reason given"})
-check("Event: status change needs current error", "set Faulty, error blank", "rejected, nothing saved",
-      count("SELECT COUNT(*) FROM maintenance WHERE fault_description='no reason given'") == 0)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "", "status_detail": ""})
-check("Edit: Faulty needs current error", "status Faulty, error blank", "rejected, status unchanged",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty'") == 0)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "Unknown",
-                                           "status_detail": "Unknown"})
-check("Edit: 'Unknown' is accepted", "status Faulty, category Unknown, detail Unknown", "saved",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty' "
-            "AND status_category='Unknown' AND status_detail='Unknown'") == 1)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational", "status_category": "Disk failure",
-                                           "status_detail": "left-over text"})
-check("Operational clears current error", "status Operational", "category and detail stored as NULL",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Operational' "
-            "AND status_category IS NULL AND status_detail IS NULL") == 1)
+# 6b. Current fault: its fields are optional (blank category = Unknown). The Edit form cannot close a fault;
+#     the fix is logged on the Log form, with a fault category other than Unknown.
+client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Faulty", "action_taken": "",
+                                                    "fault_description": "no action yet"})
+check("Log form: action still required", "set Faulty, action blank", "rejected, nothing saved",
+      count("SELECT COUNT(*) FROM maintenance WHERE fault_description='no action yet'") == 0)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "", "status_detail": "",
+                                           "status_action": "", "status_technician": ""})
+check("Edit form: fault fields optional", "status Faulty, every fault field blank", "saved, category becomes Unknown",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty' AND status_category='Unknown'") == 1)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational"})
+check("Edit form cannot close a fault", "status Operational on the Edit form", "status stays Faulty",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty'") == 1)
+client.post("/assets/TEST-001/maintenance", data={**ev, "fault_category": "Unknown", "fault_description": "fix attempt",
+                                                    "set_status": "Operational"})
+check("Fix needs a fault category other than Unknown", "set Operational, category Unknown", "rejected",
+      count("SELECT COUNT(*) FROM maintenance WHERE fault_description='fix attempt'") == 0)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "Overheating",
+                                           "status_detail": "Hot CPU", "status_action": "Clean fans",
+                                           "status_technician": "Sara"})
 detail = client.get("/assets/TEST-001").get_data(as_text=True)
-check("Detail shows N/A for operational", "GET /assets/TEST-001", "Current error: N/A",
-      "<dt>Current error</dt><dd>N/A</dd>" in detail)
-OTHER = [i for i in ids if i != "TEST-001"][0]   # a seeded asset, so TEST-001 keeps its one event
-client.post(f"/assets/{OTHER}/maintenance", data={**ev, "set_status": "Faulty", "status_category": "Other",
-                                                   "status_detail": "Board not posting",
-                                                   "fault_description": "reason test"})
-check("Event stores current error", "set Faulty + category Other + detail", "status, category and detail saved",
+check("Current fault section shows the entry", "GET /assets/TEST-001", "Hot CPU, Clean fans, Sara shown",
+      "Hot CPU" in detail and "Clean fans" in detail and "Sara" in detail)
+check("Log form is prefilled from the current fault", "GET /assets/TEST-001", "Overheating selected, fields filled",
+      "<option selected>Overheating</option>" in detail and 'value="Hot CPU"' in detail
+      and 'value="Clean fans"' in detail and 'value="Sara"' in detail)
+client.post("/assets/TEST-001/maintenance", data={"event_date": "2026-03-20", "fault_category": "Overheating",
+            "fault_description": "Hot CPU", "action_taken": "Clean fans", "technician": "Sara", "cost": "0",
+            "set_status": "Operational"})
+check("Log form closes the fault", "set Operational with the prefilled details", "status Operational, fault fields NULL",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Operational' AND status_category IS NULL "
+            "AND status_detail IS NULL AND status_action IS NULL AND status_technician IS NULL AND status_date IS NULL") == 1)
+check("The fix is in the history", "the resolving event", "one history row for the fault",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001' AND fault_description='Hot CPU'") == 1)
+detail = client.get("/assets/TEST-001").get_data(as_text=True)
+check("Current fault shows dashes when Operational", "GET /assets/TEST-001", "a row of '-' in every column",
+      "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in detail)
+OTHER = [i for i in ids if i != "TEST-001"][0]   # a seeded asset, so TEST-001 keeps its events
+client.post(f"/assets/{OTHER}/maintenance", data={**ev, "fault_category": "Other", "fault_description": "Board not posting",
+                                                   "action_taken": "Ordered board", "technician": "Ali", "set_status": "Faulty"})
+check("Log form stores the current fault", "set Faulty, category Other", "category, detail and action saved",
       count("SELECT COUNT(*) FROM assets WHERE asset_id=? AND status='Faulty' AND status_category='Other' "
-            "AND status_detail='Board not posting'", OTHER) == 1)
+            "AND status_detail='Board not posting' AND status_action='Ordered board'", OTHER) == 1)
 
 # 7. Retire (not delete) and reactivate
 client.post("/assets/TEST-001/retire")
 check("Retire asset", "POST retire", "active=0, row and history kept",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND active=0") == 1
-      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1)
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") >= 1)
 check("Retired hidden from list", "GET /assets", "TEST-001 not shown",
       'href="/assets/TEST-001"' not in client.get("/assets").get_data(as_text=True))
 check("Retired visible on request", "GET /assets?show=retired", "TEST-001 shown",
@@ -222,11 +243,11 @@ check("Dashboard total cost in dollars", "GET /dashboard", "amounts start with $
 
 edit_page = client.get(f"/assets/{OTHER}").get_data(as_text=True)
 check("Fault category drop-down", f"GET /assets/{OTHER}", "select with Other and Unknown",
-      '<select name="fault_category"' in edit_page and "<option>Other</option>" in edit_page
-      and "<option>Unknown</option>" in edit_page)
-check("Current error drop-down", f"GET /assets/{OTHER}/edit", "select with N/A, Unknown, Other",
+      '<select name="fault_category"' in edit_page and ">Other</option>" in edit_page
+      and ">Unknown</option>" in edit_page)
+check("Current fault drop-down", f"GET /assets/{OTHER}/edit", "fault category select with Unknown and Other",
       '<select name="status_category"' in client.get(f"/assets/{OTHER}/edit").get_data(as_text=True)
-      and "<option>N/A</option>" in client.get(f"/assets/{OTHER}/edit").get_data(as_text=True))
+      and "<option>Unknown</option>" in client.get(f"/assets/{OTHER}/edit").get_data(as_text=True))
 check("RAM type drop-down", "GET /assets/new", "DDR1 to DDR5 options",
       all(f"<option>DDR{n}</option>" in client.get("/assets/new").get_data(as_text=True) for n in range(1, 6)))
 
@@ -349,9 +370,9 @@ check("Faulty: stats and attention list", "status Faulty, category Unknown",
       and any(r["asset_id"] == S for r in d6["attention"]))
 check("Faulty: charts still add up", "after status change", "every chart sums to the total",
       sums_match_total(d6))
-client.post(f"/assets/{S}/edit", data={**GOOD, "asset_id": S, "ram_gb": "64", "ram_type": "DDR4", "gpu": "",
-                                       "purchase_date": "2020-01-01", "warranty_expiry": "2028-01-01",
-                                       "location": "Lab 3", "status": "Operational"})
+client.post(f"/assets/{S}/maintenance", data={"event_date": "2026-03-20", "fault_category": "Disk failure",
+            "fault_description": "Replaced part", "action_taken": "Swapped", "technician": "Ali", "cost": "0",
+            "set_status": "Operational"})
 d7 = queries.dashboard_data()
 check("Back to Operational: stats restore", "status Operational", "faulty and attention back to base",
       d7["stats"]["faulty"] == base["stats"]["faulty"]
@@ -447,17 +468,28 @@ client.post("/assets/new", data={**GOOD, "asset_id": "HIST-2"})
 client.post("/assets/HIST-2/maintenance", data={"event_date": "2026-03-08", "fault_category": "RAM fault",
             "fault_description": "Blue screens", "action_taken": "Replaced fan module", "technician": "Ali",
             "cost": "10", "set_status": "Faulty", "status_category": "RAM fault", "status_detail": "Blue screens"})
-client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational"})
+client.post("/assets/HIST-2/maintenance", data={"event_date": "2026-03-10", "fault_category": "RAM fault",
+            "fault_description": "Fan fitted", "action_taken": "Fitted new fan", "technician": "Ali", "cost": "0",
+            "set_status": "Operational"})
 h3 = client.get("/maintenance").get_data(as_text=True)
-check("Resolved on the Edit form", "fault logged, then status set Operational on Edit",
+check("Resolved in the Log form", "fault logged, then fix logged with category RAM fault",
       "earlier fault now shows (Done)", 'Replaced fan module <span class="done">(Done)</span>' in h3)
+client.post("/assets/new", data={**GOOD, "asset_id": "HIST-3", "status": "Operational"})
 ev_now = count("SELECT COUNT(*) FROM maintenance")
-client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair",
-                                         "status_category": "RAM fault", "status_detail": "Bad stick"})
-check("Status set on Edit form is not a history row", "Under Repair set on Edit form",
-      "asset needs attention; no event written (use Log event to record a fault)",
+client.post("/assets/HIST-3/edit", data={**GOOD, "asset_id": "HIST-3", "status": "Faulty",
+                                         "status_category": "Display issue", "status_detail": "No picture",
+                                         "status_action": "Check cable", "status_technician": ""})
+check("Fault set on the Edit form is in history", "Operational -> Faulty on the Edit form",
+      "one history row with the fault details", count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-3' "
+      "AND fault_description='No picture' AND fault_category='Display issue'") == 1
+      and count("SELECT COUNT(*) FROM maintenance") == ev_now + 1)
+ev_now = count("SELECT COUNT(*) FROM maintenance")
+client.post("/assets/HIST-3/edit", data={**GOOD, "asset_id": "HIST-3", "status": "Under Repair",
+                                         "status_category": "Display issue", "status_detail": "No picture",
+                                         "status_action": "Replaced panel", "status_technician": "Ali"})
+check("Progress on the Edit form adds no history row", "Faulty -> Under Repair", "no new row; status updated",
       count("SELECT COUNT(*) FROM maintenance") == ev_now
-      and count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Under Repair'") == 1)
+      and count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-3' AND status='Under Repair'") == 1)
 
 # 14e. Final sync check: every view agrees with the same data
 d_end = queries.dashboard_data()
@@ -522,6 +554,45 @@ check("Database also refuses a duplicate IP in a place", f"copy {pair[2]} to {pa
       db_refused)
 client.post("/assets/new", data={**GOOD, "asset_id": "", "location": "Lab 1", "ip_address": "10.0.0.999"})
 check("Invalid IP still rejected", "10.0.0.999", "rejected", count("SELECT COUNT(*) FROM assets WHERE ip_address='10.0.0.999'") == 0)
+
+# 16. Sorting, the current fault box and the fault rules on new assets
+def ids_in(html):
+    return re.findall(r'<a href="/assets/([^"]+)">', html)
+
+
+def column_values(html, pattern):
+    return [m for m in re.findall(pattern, html)]
+
+
+html = client.get("/assets").get_data(as_text=True)
+check("Default sort: Asset ID ascending", "GET /assets", "rows in Asset ID order",
+      ids_in(html) == [r[0] for r in count_rows("SELECT asset_id FROM assets WHERE active=1 ORDER BY asset_id")])
+html = client.get("/assets?sort=ram&dir=desc").get_data(as_text=True)
+rams = [int(x) for x in column_values(html, r"<td>(\d+) GB")]
+check("Sort by RAM, descending", "sort=ram&dir=desc", "RAM values never increase down the list",
+      rams == sorted(rams, reverse=True) and len(rams) > 1)
+check("Descending arrow shown", "sort=ram&dir=desc", "down arrow on RAM heading", "\u25bc" in html)
+html = client.get("/assets?sort=faults&dir=asc").get_data(as_text=True)
+faults = [int(x) for x in column_values(html, r"</td>\s*<td>(\d+)</td>\s*</tr>")]
+check("Sort by faults, ascending", "sort=faults&dir=asc", "fault counts never decrease",
+      faults == sorted(faults) and len(faults) > 1)
+html = client.get("/assets?sort=DROP%20TABLE").get_data(as_text=True)
+check("Unknown sort column ignored", "sort=DROP TABLE", "page loads in default order",
+      html and ids_in(html) == [r[0] for r in count_rows("SELECT asset_id FROM assets WHERE active=1 ORDER BY asset_id")])
+form_new = client.get("/assets/new").get_data(as_text=True)
+check("Fault box on the Add form", "GET /assets/new", "box present, category defaults to Unknown",
+      'id="fault-box"' in form_new and "<option selected>Unknown</option>" in form_new
+      and "Actions to be taken" in form_new and 'name="status_technician"' in form_new)
+client.post("/assets/new", data={**GOOD, "asset_id": "FLT-1", "status": "Faulty", "status_category": "",
+                                 "status_detail": "", "status_action": "", "status_technician": ""})
+check("New faulty asset needs no fault details", "status Faulty, every fault field blank", "saved as Unknown and in history",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='FLT-1' AND status='Faulty' AND status_category='Unknown'") == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='FLT-1'") == 1)
+client.post("/assets/new", data={**GOOD, "asset_id": "OPS-1", "status": "Operational"})
+check("Operational asset shows dashes", "GET /assets/OPS-1", "a row of '-' in every column",
+      "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in client.get("/assets/OPS-1").get_data(as_text=True))
+check("Operational asset has no current fault in the database", "OPS-1", "all fault fields NULL",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='OPS-1' AND status_category IS NULL AND status_date IS NULL") == 1)
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

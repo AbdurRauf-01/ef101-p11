@@ -1,0 +1,14 @@
+What changed:
+
+1. Sorting in the asset list
+- Every column heading is clickable. The first click sorts ascending, and the second reverses it. A ▲ or ▼ shows the active column, and the other headings show a faint ↕.
+- The default is Asset ID, ascending.
+- Sorting works with the search and filters, and the CSV export follows the current sort.
+2. Current fault and the Edit/Add window
+- Choosing Faulty or Under Repair shows a box with fault category, fault description, actions to be taken, and technician. None of them are required. A blank category is saved as “Unknown”.
+- Each fault is also recorded in the asset’s history, including faults entered on the Edit form. This was a gap before, and it’s now closed.
+- The asset page has a Current fault section above Maintenance history. For operational assets, every column shows “-”.
+3. Closing a fault
+- Setting a faulty asset to Operational on the Edit form doesn’t close the fault there. The other changes are saved, the fault stays open, and the page takes you to the Log form.
+- The Log form is prefilled from the Current fault section. You must choose a fault category other than “Unknown”, and fill in the description, action, and technician.
+- When the fix is logged, the asset becomes Operational and its Current fault section shows “-”.
