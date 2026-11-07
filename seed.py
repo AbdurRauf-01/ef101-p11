@@ -38,6 +38,17 @@ FAULTS = {
 TECHS = ["A. Khan", "S. Ahmed", "R. Ali"]
 
 
+# Current-error texts given to the Faulty / Under Repair demo assets (in order). "Unknown" is a valid answer.
+CURRENT_ERRORS = [
+    "Intermittent RAM errors, memtest failing",
+    "Unknown",
+    "Drive not detected by BIOS, replacement ordered",
+    "Overheating under load, fan replacement pending",
+    "No video output, GPU being checked",
+    "Unknown",
+]
+
+
 def rand_date(start, end):
     return start + timedelta(days=random.randint(0, (end - start).days))
 
@@ -96,7 +107,15 @@ def main():
         a[15] = 0
         a[14] = "Faulty"
 
-    conn.executemany("INSERT INTO assets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", assets)
+    # Current error: every Faulty / Under Repair asset gets one; Operational assets stay NULL (shown as N/A).
+    reasons = {}
+    for n, a in enumerate(x for x in assets if x[14] != "Operational"):
+        reasons[a[0]] = CURRENT_ERRORS[n % len(CURRENT_ERRORS)]
+    rows = [a[:15] + [reasons.get(a[0]), a[15]] for a in assets]
+    conn.executemany(
+        "INSERT INTO assets (asset_id,manufacturer,model,cpu,cpu_family,ram_gb,storage_type,storage_gb,"
+        "gpu,os,ip_address,location,purchase_date,warranty_expiry,status,status_reason,active) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     conn.executemany(
         "INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
         "action_taken,technician,cost) VALUES (?,?,?,?,?,?,?)", events)

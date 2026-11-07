@@ -22,6 +22,7 @@ CREATE TABLE assets (
     warranty_expiry TEXT NOT NULL,                    -- warranty status is COMPUTED from this
     status          TEXT NOT NULL DEFAULT 'Operational'
                     CHECK (status IN ('Operational','Faulty','Under Repair')),
+    status_reason   TEXT,                             -- current error: NULL when Operational (N/A); required otherwise, 'Unknown' allowed
     active          INTEGER NOT NULL DEFAULT 1        -- 0 = retired (kept for history)
 );
 

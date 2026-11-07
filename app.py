@@ -13,16 +13,19 @@ from flask import (Flask, Response, flash, redirect, render_template, request,
 
 import queries
 from db import DB_PATH
-from queries import ATTENTION_FAULT_COUNT, FIELDS, WARRANTY_SOON_DAYS
+from queries import CURRENT_ERROR_STATUSES, FIELDS, WARRANTY_SOON_DAYS
 
 app = Flask(__name__)
 app.secret_key = "ef101-demo-key"  # demo only; no real secrets in this project
 
-# The "needs attention" rule (ATTENTION_FAULT_COUNT, WARRANTY_SOON_DAYS) and FIELDS
-# live in queries.py together with all the SQL.
+# The "needs attention" rule, CURRENT_ERROR_STATUSES and FIELDS live in queries.py,
+# together with all the SQL.
 # Allowed values below must match the CHECK constraints in schema.sql.
 STATUSES = ["Operational", "Faulty", "Under Repair"]
 STORAGE_TYPES = ["SSD", "NVMe", "HDD", "Hybrid"]
+# Shown whenever Faulty / Under Repair is set (on the edit form or in a logged event).
+NEED_REASON = ("Current error is required for Faulty or Under Repair. "
+               "Describe the fault, or type Unknown if the cause is not known.")
 
 
 def today():
@@ -64,6 +67,10 @@ def validate_asset(f, is_new, existing_id=None):
         errors.append("Choose a valid storage type.")
     if c["status"] not in STATUSES:
         errors.append("Choose a valid status.")
+    if c["status"] == "Operational":
+        c["status_reason"] = None          # a working asset has no current error (shown as N/A)
+    elif c["status"] in CURRENT_ERROR_STATUSES and not c["status_reason"]:
+        errors.append(NEED_REASON)
     if c["ip_address"]:
         try:
             ipaddress.ip_address(c["ip_address"])
@@ -191,12 +198,18 @@ def maintenance_add(asset_id):
     except ValueError:
         errors.append("Cost must be a number, zero or more.")
         cost = 0
+    new_status = request.form.get("set_status")
+    if new_status not in STATUSES:
+        new_status = None
+    reason = (request.form.get("status_reason") or "").strip()
+    if new_status in CURRENT_ERROR_STATUSES and not reason:
+        errors.append(NEED_REASON)
     if errors:
         for e in errors:
             flash(e, "danger")
         return redirect(url_for("asset_detail", asset_id=asset_id))
-    new_status = request.form.get("set_status")
-    queries.add_event(asset_id, f, cost, new_status if new_status in STATUSES else None)
+    queries.add_event(asset_id, f, cost, new_status,
+                      reason if new_status in CURRENT_ERROR_STATUSES else None)
     flash("Maintenance event logged.", "success")
     return redirect(url_for("asset_detail", asset_id=asset_id))
 
@@ -207,8 +220,7 @@ def dashboard():
     d = queries.dashboard_data()
     return render_template("dashboard.html", stats=d["stats"], charts=d["charts"],
                            fault_cats=d["fault_cats"], top_assets=d["top_assets"],
-                           attention=d["attention"],
-                           rule_count=ATTENTION_FAULT_COUNT, rule_days=WARRANTY_SOON_DAYS)
+                           attention=d["attention"], history=d["history"])
 
 
 # ---- Exports -------------------------------------------------------------------

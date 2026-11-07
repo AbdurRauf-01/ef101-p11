@@ -23,6 +23,7 @@
   <div><label>Warranty expiry * (YYYY-MM-DD)</label><input type="date" name="warranty_expiry" value="{{ a.get('warranty_expiry','') }}"></div>
   <div><label>Operational status</label><select name="status">
     {% for o in statuses %}<option {{ 'selected' if a.get('status')==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Current error (required for Faulty / Under Repair)</label><input name="status_reason" value="{{ a.get('status_reason','') or '' }}" placeholder="Describe the fault, or Unknown"></div>
 </div>
 <p class="row" style="margin-top:16px"><button class="btn" type="submit">Save</button>
 <a class="btn sec" href="{{ url_for('assets') }}">Cancel</a></p>

@@ -85,7 +85,8 @@ if nullgpu:
 
 # 6. Log maintenance + history
 ev = dict(event_date="2026-01-05", fault_category="Disk failure", fault_description="Clicking noise",
-          action_taken="Replaced drive", technician="Ali", cost="45.5", set_status="Under Repair")
+          action_taken="Replaced drive", technician="Ali", cost="45.5", set_status="Under Repair",
+          status_reason="Drive clicking, replacement pending")
 client.post("/assets/TEST-001/maintenance", data=ev)
 check("Log maintenance event", "valid event", "row saved",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1)
@@ -97,6 +98,29 @@ client.post("/assets/TEST-001/maintenance", data={**ev, "cost": "-5", "fault_des
 client.post("/assets/TEST-001/maintenance", data={**ev, "event_date": "2999-01-01", "fault_description": "future"})
 check("Invalid event rejected", "negative cost / future date", "nothing saved",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1)
+
+# 6b. Current-error rules: Faulty / Under Repair must state the error; Operational shows N/A
+client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Faulty", "status_reason": "",
+                                                    "fault_description": "no reason given"})
+check("Event: status change needs current error", "set Faulty, error blank", "rejected, nothing saved",
+      count("SELECT COUNT(*) FROM maintenance WHERE fault_description='no reason given'") == 0)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_reason": ""})
+check("Edit: Faulty needs current error", "status Faulty, error blank", "rejected, status unchanged",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty'") == 0)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_reason": "Unknown"})
+check("Edit: 'Unknown' is accepted", "status Faulty, error Unknown", "saved",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty' AND status_reason='Unknown'") == 1)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational", "status_reason": "left-over text"})
+check("Operational clears current error", "status Operational", "error stored as NULL",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Operational' AND status_reason IS NULL") == 1)
+detail = client.get("/assets/TEST-001").get_data(as_text=True)
+check("Detail shows N/A for operational", "GET /assets/TEST-001", "Current error: N/A",
+      "<dt>Current error</dt><dd>N/A</dd>" in detail)
+OTHER = [i for i in ids if i != "TEST-001"][0]   # a seeded asset, so TEST-001 keeps its one event
+client.post(f"/assets/{OTHER}/maintenance", data={**ev, "set_status": "Faulty",
+                                                   "status_reason": "Board not posting", "fault_description": "reason test"})
+check("Event stores current error", "set Faulty + reason on a logged event", "status and reason saved",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id=? AND status='Faulty' AND status_reason='Board not posting'", OTHER) == 1)
 
 # 7. Retire (not delete) and reactivate
 client.post("/assets/TEST-001/retire")
@@ -142,6 +166,12 @@ body = dash.get_data(as_text=True)
 total_active = count("SELECT COUNT(*) FROM assets WHERE active=1")
 check("Dashboard loads", "GET /dashboard", "HTTP 200", dash.status_code == 200)
 check("Dashboard total", "active assets", f"shows {total_active}", f">{total_active}<" in body)
+faulty_or_repair = count("SELECT COUNT(*) FROM assets WHERE active=1 AND status IN ('Faulty','Under Repair')")
+check("Attention = current errors only", "GET /dashboard", f"heading shows {faulty_or_repair}",
+      f"Assets needing attention ({faulty_or_repair})" in body)
+last = db.get_db().execute("SELECT fault_description FROM maintenance ORDER BY event_date DESC, id DESC LIMIT 1").fetchone()
+check("Fault history section", "latest event on dashboard", "section shown with the newest event",
+      "Fault history" in body and last[0] in body)
 
 # 10. Exports
 a = client.get("/export/assets.csv")

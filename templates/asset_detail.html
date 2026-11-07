@@ -32,6 +32,7 @@
 <div class="card"><h2>Status &amp; warranty</h2>
 <dl>
   <dt>Operational status</dt><dd><span class="badge b-{{ a.status }}">{{ a.status }}</span></dd>
+  <dt>Current error</dt><dd>{% if a.status == 'Operational' %}N/A{% else %}{{ a.status_reason or 'Unknown' }}{% endif %}</dd>
   <dt>Purchase date</dt><dd>{{ a.purchase_date }}</dd>
   <dt>Warranty expiry</dt><dd>{{ a.warranty_expiry }} <span class="badge b-{{ warranty }}">{{ warranty }}</span></dd>
   <dt>Maintenance events</dt><dd>{{ events|length }}</dd>
@@ -63,6 +64,7 @@
   <div><label>Cost</label><input name="cost" value="0"></div>
   <div><label>Update asset status to</label><select name="set_status"><option value="">(no change)</option>
     <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
+  <div><label>Current error (required for Faulty / Under Repair)</label><input name="status_reason" placeholder="Describe the fault, or Unknown"></div>
 </div>
 <p><button class="btn" type="submit">Log event</button></p>
 </form></div>
