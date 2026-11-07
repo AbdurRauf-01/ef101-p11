@@ -11,6 +11,8 @@
     {% for o in opts.cpu_family %}<option {{ 'selected' if f.get('cpu_family')==o }}>{{ o }}</option>{% endfor %}</select></div>
   <div><label>RAM (GB)</label><select name="ram_gb"><option value="">All</option>
     {% for o in opts.ram_gb %}<option value="{{ o }}" {{ 'selected' if f.get('ram_gb')==o|string }}>{{ o }} GB</option>{% endfor %}</select></div>
+  <div><label>RAM type</label><select name="ram_type"><option value="">All</option>
+    {% for o in ram_types %}<option {{ 'selected' if f.get('ram_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
   <div><label>Storage type</label><select name="storage_type"><option value="">All</option>
     {% for o in storage_types %}<option {{ 'selected' if f.get('storage_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
   <div><label>Location</label><select name="location"><option value="">All</option>
@@ -39,7 +41,7 @@
       {% if not a.active %}<span class="badge b-Retired">Retired</span>{% endif %}</td>
   <td>{{ a.manufacturer }} {{ a.model }}</td>
   <td>{{ a.cpu }}</td>
-  <td>{{ a.ram_gb }} GB</td>
+  <td>{{ a.ram_gb }} GB {{ a.ram_type }}</td>
   <td>{{ a.storage_type }} {{ a.storage_gb }} GB</td>
   <td>{{ a.gpu or 'Integrated' }}</td>
   <td>{{ a.location }}</td>

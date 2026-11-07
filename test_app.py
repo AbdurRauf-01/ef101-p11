@@ -13,6 +13,7 @@ import db
 TMP = Path(tempfile.mkdtemp()) / "test.db"
 db.DB_PATH = TMP                       # redirect everything to a throwaway database
 import seed                            # noqa: E402
+import queries                         # noqa: E402
 import app as appmod                   # noqa: E402
 
 seed.main()
@@ -31,8 +32,22 @@ def count(sql, *p):
     return n
 
 
+def chart(d, name):
+    """A dashboard chart as {label: count}."""
+    return {label: n for label, n, _ in d["charts"][name]}
+
+
+def fault(d):
+    return {label: n for label, n, _ in d["fault_cats"]}
+
+
+def sums_match_total(d):
+    """Every distribution chart must add up to the number of active assets."""
+    return all(sum(n for _, n, _ in rows) == d["stats"]["total"] for rows in d["charts"].values())
+
+
 GOOD = dict(asset_id="TEST-001", manufacturer="Dell", model="OptiPlex 7090", cpu="Intel Core i5-12400",
-            cpu_family="Core i5", ram_gb="16", storage_type="SSD", storage_gb="512", gpu="",
+            cpu_family="Core i5", ram_gb="16", ram_type="DDR4", storage_type="SSD", storage_gb="512", gpu="",
             os="Windows 11 Pro", ip_address="192.168.1.50", location="Lab 1",
             purchase_date="2025-01-10", warranty_expiry="2028-01-10", status="Operational")
 
@@ -60,6 +75,11 @@ bad_cases = {
     "Future purchase date": {"purchase_date": "2999-01-01"},
     "Warranty before purchase": {"warranty_expiry": "2020-01-01"},
     "Invalid storage type": {"storage_type": "Floppy"},
+    "Missing RAM type": {"ram_type": ""},
+    "Unknown RAM type": {"ram_type": "DDR6"},
+    "Faulty, no category": {"status": "Faulty", "status_category": "", "status_detail": "x"},
+    "Faulty, category not in list": {"status": "Faulty", "status_category": "Gremlins", "status_detail": "x"},
+    "Faulty, no details": {"status": "Faulty", "status_category": "Unknown", "status_detail": ""},
 }
 for i, (label, change) in enumerate(bad_cases.items()):
     form = {**GOOD, **change, "asset_id": f"BAD-{i}"}
@@ -86,7 +106,7 @@ if nullgpu:
 # 6. Log maintenance + history
 ev = dict(event_date="2026-01-05", fault_category="Disk failure", fault_description="Clicking noise",
           action_taken="Replaced drive", technician="Ali", cost="45.5", set_status="Under Repair",
-          status_reason="Drive clicking, replacement pending")
+          status_category="Disk failure", status_detail="Drive clicking, replacement pending")
 client.post("/assets/TEST-001/maintenance", data=ev)
 check("Log maintenance event", "valid event", "row saved",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1)
@@ -96,31 +116,39 @@ page = client.get("/assets/TEST-001").get_data(as_text=True)
 check("Asset history page", "GET /assets/TEST-001", "shows the event", "Clicking noise" in page)
 client.post("/assets/TEST-001/maintenance", data={**ev, "cost": "-5", "fault_description": "neg"})
 client.post("/assets/TEST-001/maintenance", data={**ev, "event_date": "2999-01-01", "fault_description": "future"})
-check("Invalid event rejected", "negative cost / future date", "nothing saved",
-      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1)
+client.post("/assets/TEST-001/maintenance", data={**ev, "fault_category": "Gremlins", "fault_description": "bogus"})
+check("Invalid event rejected", "negative cost / future date / unknown category", "nothing saved",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='TEST-001'") == 1
+      and count("SELECT COUNT(*) FROM maintenance WHERE fault_description='bogus'") == 0)
 
-# 6b. Current-error rules: Faulty / Under Repair must state the error; Operational shows N/A
-client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Faulty", "status_reason": "",
-                                                    "fault_description": "no reason given"})
+# 6b. Current-error rules: Faulty / Under Repair need a category AND details; Operational shows N/A
+client.post("/assets/TEST-001/maintenance", data={**ev, "set_status": "Faulty", "status_category": "",
+                                                    "status_detail": "", "fault_description": "no reason given"})
 check("Event: status change needs current error", "set Faulty, error blank", "rejected, nothing saved",
       count("SELECT COUNT(*) FROM maintenance WHERE fault_description='no reason given'") == 0)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_reason": ""})
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "", "status_detail": ""})
 check("Edit: Faulty needs current error", "status Faulty, error blank", "rejected, status unchanged",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty'") == 0)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_reason": "Unknown"})
-check("Edit: 'Unknown' is accepted", "status Faulty, error Unknown", "saved",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty' AND status_reason='Unknown'") == 1)
-client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational", "status_reason": "left-over text"})
-check("Operational clears current error", "status Operational", "error stored as NULL",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Operational' AND status_reason IS NULL") == 1)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Faulty", "status_category": "Unknown",
+                                           "status_detail": "Unknown"})
+check("Edit: 'Unknown' is accepted", "status Faulty, category Unknown, detail Unknown", "saved",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Faulty' "
+            "AND status_category='Unknown' AND status_detail='Unknown'") == 1)
+client.post("/assets/TEST-001/edit", data={**GOOD, "status": "Operational", "status_category": "Disk failure",
+                                           "status_detail": "left-over text"})
+check("Operational clears current error", "status Operational", "category and detail stored as NULL",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND status='Operational' "
+            "AND status_category IS NULL AND status_detail IS NULL") == 1)
 detail = client.get("/assets/TEST-001").get_data(as_text=True)
 check("Detail shows N/A for operational", "GET /assets/TEST-001", "Current error: N/A",
       "<dt>Current error</dt><dd>N/A</dd>" in detail)
 OTHER = [i for i in ids if i != "TEST-001"][0]   # a seeded asset, so TEST-001 keeps its one event
-client.post(f"/assets/{OTHER}/maintenance", data={**ev, "set_status": "Faulty",
-                                                   "status_reason": "Board not posting", "fault_description": "reason test"})
-check("Event stores current error", "set Faulty + reason on a logged event", "status and reason saved",
-      count("SELECT COUNT(*) FROM assets WHERE asset_id=? AND status='Faulty' AND status_reason='Board not posting'", OTHER) == 1)
+client.post(f"/assets/{OTHER}/maintenance", data={**ev, "set_status": "Faulty", "status_category": "Other",
+                                                   "status_detail": "Board not posting",
+                                                   "fault_description": "reason test"})
+check("Event stores current error", "set Faulty + category Other + detail", "status, category and detail saved",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id=? AND status='Faulty' AND status_category='Other' "
+            "AND status_detail='Board not posting'", OTHER) == 1)
 
 # 7. Retire (not delete) and reactivate
 client.post("/assets/TEST-001/retire")
@@ -135,6 +163,7 @@ client.post("/assets/TEST-001/reactivate")
 check("Reactivate asset", "POST reactivate", "active=1",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='TEST-001' AND active=1") == 1)
 
+
 # 8. Filters: page rows must match direct SQL counts
 def rows_in(url):
     html = client.get(url).get_data(as_text=True)
@@ -146,6 +175,7 @@ fam = c.execute("SELECT cpu_family FROM assets WHERE active=1 LIMIT 1").fetchone
 for label, qs, sql, param in [
     ("Filter CPU family", f"cpu_family={fam}", "SELECT COUNT(*) FROM assets WHERE active=1 AND cpu_family=?", fam),
     ("Filter RAM", "ram_gb=16", "SELECT COUNT(*) FROM assets WHERE active=1 AND ram_gb=?", 16),
+    ("Filter RAM type", "ram_type=DDR4", "SELECT COUNT(*) FROM assets WHERE active=1 AND ram_type=?", "DDR4"),
     ("Filter storage type", "storage_type=HDD", "SELECT COUNT(*) FROM assets WHERE active=1 AND storage_type=?", "HDD"),
     ("Filter status", "status=Faulty", "SELECT COUNT(*) FROM assets WHERE active=1 AND status=?", "Faulty"),
     ("Filter warranty expired", "warranty=Expired",
@@ -160,7 +190,7 @@ check("Search", "q=OptiPlex", "all rows contain OptiPlex",
 check("SQL injection attempt", "q=' OR 1=1 --", "no crash (parameterised SQL)",
       client.get("/assets?q=%27+OR+1%3D1+--").status_code == 200)
 
-# 9. Dashboard numbers match the data
+# 9. Dashboard: numbers, order of cards and charts, and the drop-down options
 dash = client.get("/dashboard")
 body = dash.get_data(as_text=True)
 total_active = count("SELECT COUNT(*) FROM assets WHERE active=1")
@@ -169,7 +199,33 @@ check("Dashboard total", "active assets", f"shows {total_active}", f">{total_act
 faulty_or_repair = count("SELECT COUNT(*) FROM assets WHERE active=1 AND status IN ('Faulty','Under Repair')")
 check("Attention = current errors only", "GET /dashboard", f"heading shows {faulty_or_repair}",
       f"Assets needing attention ({faulty_or_repair})" in body)
-last = db.get_db().execute("SELECT fault_description FROM maintenance ORDER BY event_date DESC, id DESC LIMIT 1").fetchone()
+stat_labels = ['class="l">Total active assets', 'class="l">Operational', 'class="l">Needing attention',
+               'class="l">Retired', 'class="l">Faulty (', 'class="l">Fault events', 'class="l">Out of warranty',
+               'class="l">Total maintenance cost']
+spots = [body.find(s) for s in stat_labels]
+check("Stat card order", "8 cards", "Total, Operational, Needing attention, Retired, Faulty, Fault events, "
+      "Out of warranty, Maintenance cost", all(p >= 0 for p in spots) and spots == sorted(spots))
+chart_titles = ["CPU family", "GPU", "RAM (GB)", "Storage type", "Assets per location", "Warranty"]
+spots = [body.find(f"<h2>{t}</h2>") for t in chart_titles]
+check("Chart order", "6 charts", "CPU family, GPU, RAM, Storage type, Assets per location, Warranty",
+      all(p >= 0 for p in spots) and spots == sorted(spots))
+check("Fault chart shows Other and Unknown", "GET /dashboard", "both entries shown",
+      '<span class="lab">Other</span>' in body and '<span class="lab">Unknown</span>' in body)
+check("Fault history not on dashboard", "GET /dashboard", "no Fault History heading there",
+      "<h2>Fault History" not in body)
+check("Dashboard sits in a 4-column stat grid", "GET /dashboard", "class stats4 present",
+      'class="grid stats4"' in body)
+check("Dashboard total cost in dollars", "GET /dashboard", "amounts start with $", "$" in body)
+
+edit_page = client.get(f"/assets/{OTHER}").get_data(as_text=True)
+check("Fault category drop-down", f"GET /assets/{OTHER}", "select with Other and Unknown",
+      '<select name="fault_category"' in edit_page and "<option>Other</option>" in edit_page
+      and "<option>Unknown</option>" in edit_page)
+check("Current error drop-down", f"GET /assets/{OTHER}/edit", "select with N/A, Unknown, Other",
+      '<select name="status_category"' in client.get(f"/assets/{OTHER}/edit").get_data(as_text=True)
+      and "<option>N/A</option>" in client.get(f"/assets/{OTHER}/edit").get_data(as_text=True))
+check("RAM type drop-down", "GET /assets/new", "DDR1 to DDR5 options",
+      all(f"<option>DDR{n}</option>" in client.get("/assets/new").get_data(as_text=True) for n in range(1, 6)))
 
 # 10. Exports
 a = client.get("/export/assets.csv")
@@ -178,27 +234,31 @@ arows = list(csv.reader(io.StringIO(a.get_data(as_text=True))))
 mrows = list(csv.reader(io.StringIO(m.get_data(as_text=True))))
 check("Export assets CSV", "GET /export/assets.csv", "header + one row per active asset",
       "csv" in a.mimetype and len(arows) - 1 == total_active)
+check("Assets CSV has new fields", "header", "ram_type and status_category columns",
+      "ram_type" in arows[0] and "status_category" in arows[0] and "status_detail" in arows[0])
 check("Export maintenance CSV", "GET /export/maintenance.csv", "header + one row per event",
       len(mrows) - 1 == count("SELECT COUNT(*) FROM maintenance"))
+check("Maintenance CSV uses cost_usd", "header", "cost_usd column", "cost_usd" in mrows[0])
 
 # 11. Robustness
 check("Unknown asset", "GET /assets/NOPE", "404 page, no crash", client.get("/assets/NOPE").status_code == 404)
 check("Unknown URL", "GET /xyz", "404 page", client.get("/xyz").status_code == 404)
 
-# 12. Sidebar pages, dollars, theme and resizer
+# 12. Sidebar pages, theme and resizer
+last = db.get_db().execute("SELECT fault_description FROM maintenance ORDER BY event_date DESC, id DESC LIMIT 1").fetchone()
 maint_page = client.get("/maintenance")
 check("Fault History page", "GET /maintenance", "HTTP 200 and newest event listed",
       maint_page.status_code == 200 and last[0] in maint_page.get_data(as_text=True))
-check("Fault History moved off dashboard", "GET /dashboard", "no Fault History heading there",
-      "<h2>Fault History" not in body)
-for url, label in [("/about/credits", "Credits"), ("/about/privacy", "Privacy Policy"), ("/about/schema", "Project Schema")]:
+for url, label in [("/about/credits", "Credits"), ("/about/privacy", "Privacy Policy"),
+                   ("/about/schema", "Project Schema"), ("/about/contact", "Contact")]:
     check(f"About: {label}", f"GET {url}", "HTTP 200", client.get(url).status_code == 200)
 svg_dl = client.get("/about/schema.svg?download=1")
 check("Schema SVG download", "GET /about/schema.svg?download=1", "attachment containing the diagram",
       "attachment" in svg_dl.headers.get("Content-Disposition", "") and b"<svg" in svg_dl.data)
 svg_view = client.get("/about/schema.svg")
 check("Schema SVG shown on page", "GET /about/schema.svg", "inline SVG, not a download",
-      svg_view.status_code == 200 and b"<svg" in svg_view.data and "attachment" not in svg_view.headers.get("Content-Disposition", ""))
+      svg_view.status_code == 200 and b"<svg" in svg_view.data
+      and "attachment" not in svg_view.headers.get("Content-Disposition", ""))
 check("Project Schema page embeds the diagram", "GET /about/schema", "img tag pointing at the SVG",
       'src="/about/schema.svg"' in client.get("/about/schema").get_data(as_text=True))
 contact = client.get("/about/contact").get_data(as_text=True)
@@ -213,14 +273,86 @@ check("Credits content", "GET /about/credits", "all four people listed",
 privacy = client.get("/about/privacy").get_data(as_text=True)
 check("Privacy Policy content", "GET /about/privacy", "effective date and offline statement",
       "October 30, 2026" in privacy and "zero outbound internet requests" in privacy)
-exp = client.get("/export/maintenance.csv")
-check("Maintenance CSV uses cost_usd", "GET /export/maintenance.csv", "header has cost_usd, no plain cost",
-      exp.data.split(b"\n")[0].decode().rstrip("\r").endswith("cost_usd"))
-check("Costs shown in dollars", "GET /dashboard", "amounts start with $", "$" in body)
 check("Sidebar navigation", "GET /dashboard", "Maintenance and About links present",
       'href="/maintenance"' in body and 'href="/about/schema"' in body)
 check("Theme toggle and resizer", "GET /dashboard", "controls present",
       'id="theme-toggle"' in body and 'id="resizer"' in body)
+
+# 13. Dashboard stays in sync with the asset data: every change shows up in the figures
+base = queries.dashboard_data()
+check("Charts add up to total", "current data", "every chart sums to the active-asset total",
+      sums_match_total(base))
+S = "SYNC-1"
+client.post("/assets/new", data={**GOOD, "asset_id": S, "ram_gb": "128", "ram_type": "DDR5",
+                                  "gpu": "NVIDIA RTX 4090", "purchase_date": "2020-01-01",
+                                  "warranty_expiry": "2021-01-01", "location": "Lab 3"})
+d1 = queries.dashboard_data()
+check("Add asset: RAM chart", "128 GB DDR5 added", "128 GB count +1",
+      chart(d1, "RAM (GB)").get("128 GB", 0) == chart(base, "RAM (GB)").get("128 GB", 0) + 1)
+check("Add asset: GPU chart", "GPU NVIDIA RTX 4090", "shows the card, count 1",
+      chart(d1, "GPU").get("NVIDIA RTX 4090", 0) == 1)
+check("Add asset: total", "active assets", "total +1", d1["stats"]["total"] == base["stats"]["total"] + 1)
+check("Add asset: warranty", "expired warranty", "out-of-warranty +1 in stat and chart",
+      d1["stats"]["out_of_warranty"] == base["stats"]["out_of_warranty"] + 1
+      and chart(d1, "Warranty")["Out of warranty"] == chart(base, "Warranty")["Out of warranty"] + 1)
+check("Add asset: charts still add up", "after add", "every chart sums to the total", sums_match_total(d1))
+
+client.post(f"/assets/{S}/edit", data={**GOOD, "asset_id": S, "ram_gb": "64", "ram_type": "DDR4", "gpu": "",
+                                       "purchase_date": "2020-01-01", "warranty_expiry": "2028-01-01",
+                                       "location": "Lab 3"})
+d2 = queries.dashboard_data()
+check("Edit RAM and GPU: charts move", "128 GB -> 64 GB, GPU -> integrated",
+      "old size -1, new size +1, GPU moves to Integrated", chart(d2, "RAM (GB)").get("128 GB", 0) == chart(base, "RAM (GB)").get("128 GB", 0)
+      and chart(d2, "RAM (GB)").get("64 GB", 0) == chart(base, "RAM (GB)").get("64 GB", 0) + 1
+      and "NVIDIA RTX 4090" not in chart(d2, "GPU")
+      and chart(d2, "GPU").get("Integrated", 0) == chart(base, "GPU").get("Integrated", 0) + 1)
+check("Edit warranty: charts move", "expiry moved to 2028", "back in warranty",
+      d2["stats"]["out_of_warranty"] == base["stats"]["out_of_warranty"]
+      and chart(d2, "Warranty")["In warranty"] == chart(base, "Warranty")["In warranty"] + 1)
+
+client.post(f"/assets/{S}/retire")
+d3 = queries.dashboard_data()
+check("Retire: totals and charts drop it", "retire", "total and 64 GB back to base, retired +1",
+      d3["stats"]["total"] == base["stats"]["total"]
+      and chart(d3, "RAM (GB)").get("64 GB", 0) == chart(base, "RAM (GB)").get("64 GB", 0)
+      and d3["stats"]["retired"] == base["stats"]["retired"] + 1)
+client.post(f"/assets/{S}/reactivate")
+d4 = queries.dashboard_data()
+check("Reactivate: totals and charts restore it", "reactivate", "total +1 again",
+      d4["stats"]["total"] == base["stats"]["total"] + 1 and sums_match_total(d4))
+
+client.post(f"/assets/{S}/maintenance", data={"event_date": "2026-02-01", "fault_category": "Other",
+                                              "fault_description": "Unexplained reboot",
+                                              "action_taken": "Logged, monitored", "technician": "Ali",
+                                              "cost": "12", "set_status": "", "status_category": "",
+                                              "status_detail": ""})
+d5 = queries.dashboard_data()
+check("Log event: failure chart", "fault category Other", "Other +1 in the failure chart",
+      fault(d5)["Other"] == fault(base)["Other"] + 1)
+check("Log event: fault events stat", "one more event", "fault events +1 and cost +12",
+      d5["stats"]["events"] == base["stats"]["events"] + 1
+      and abs(d5["stats"]["total_cost"] - base["stats"]["total_cost"] - 12) < 0.001)
+check("Log event: no status change", "set_status blank", "attention unchanged",
+      d5["stats"]["attention"] == base["stats"]["attention"])
+
+client.post(f"/assets/{S}/edit", data={**GOOD, "asset_id": S, "ram_gb": "64", "ram_type": "DDR4", "gpu": "",
+                                       "purchase_date": "2020-01-01", "warranty_expiry": "2028-01-01",
+                                       "location": "Lab 3", "status": "Faulty",
+                                       "status_category": "Unknown", "status_detail": "Unknown"})
+d6 = queries.dashboard_data()
+check("Faulty: stats and attention list", "status Faulty, category Unknown",
+      "faulty +1, attention +1, asset listed", d6["stats"]["faulty"] == base["stats"]["faulty"] + 1
+      and d6["stats"]["attention"] == base["stats"]["attention"] + 1
+      and any(r["asset_id"] == S for r in d6["attention"]))
+check("Faulty: charts still add up", "after status change", "every chart sums to the total",
+      sums_match_total(d6))
+client.post(f"/assets/{S}/edit", data={**GOOD, "asset_id": S, "ram_gb": "64", "ram_type": "DDR4", "gpu": "",
+                                       "purchase_date": "2020-01-01", "warranty_expiry": "2028-01-01",
+                                       "location": "Lab 3", "status": "Operational"})
+d7 = queries.dashboard_data()
+check("Back to Operational: stats restore", "status Operational", "faulty and attention back to base",
+      d7["stats"]["faulty"] == base["stats"]["faulty"]
+      and d7["stats"]["attention"] == base["stats"]["attention"])
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

@@ -4,19 +4,23 @@ All values are passed as ? parameters (never pasted into the SQL text), so input
 """
 from db import get_db
 
-# ---- "Needs attention" = current errors only (documented in the report) -------
-# An asset needs attention when it is active AND its status is Faulty or Under Repair.
-# Past fault events do NOT change this list; they are shown in the Fault history instead.
-# WARRANTY_SOON_DAYS only drives the "Expiring soon" warranty label (used in app.py).
-WARRANTY_SOON_DAYS = 30
+# ---- Drop-down lists. app.py validates against these.
+BASE_FAULTS = ["Disk failure", "Overheating", "Network issue", "RAM fault",
+               "OS corruption", "Display issue", "PSU failure"]
+FAULT_CATEGORIES = BASE_FAULTS + ["Other", "Unknown"]                    # maintenance event category
+CURRENT_ERROR_CATEGORIES = BASE_FAULTS + ["N/A", "Unknown", "Other"]     # Faulty / Under Repair category
+RAM_TYPES = ["DDR1", "DDR2", "DDR3", "DDR4", "DDR5"]
 
-# A current error (status_reason) is required for these statuses. Operational = N/A (stored as NULL).
+# ---- Current error: required for these statuses. Operational = N/A (stored as NULL).
 CURRENT_ERROR_STATUSES = ("Faulty", "Under Repair")
 
+# ---- Warranty label window (used in app.py)
+WARRANTY_SOON_DAYS = 30
+
 # Columns of the assets table that a user can enter (active is handled separately)
-FIELDS = ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "ram_gb",
+FIELDS = ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "ram_gb", "ram_type",
           "storage_type", "storage_gb", "gpu", "os", "ip_address", "location",
-          "purchase_date", "warranty_expiry", "status", "status_reason"]
+          "purchase_date", "warranty_expiry", "status", "status_category", "status_detail"]
 
 EVENT_FIELDS = ["id", "asset_id", "event_date", "fault_category", "fault_description",
                 "action_taken", "technician", "cost_usd"]
@@ -48,7 +52,7 @@ def filtered_assets(args):
     if args.get("q"):
         q += " AND (a.asset_id LIKE ? OR a.model LIKE ? OR a.manufacturer LIKE ? OR a.cpu LIKE ? OR a.ip_address LIKE ?)"
         p += [f"%{args['q']}%"] * 5
-    for key in ["cpu_family", "ram_gb", "storage_type", "location", "status"]:
+    for key in ["cpu_family", "ram_gb", "ram_type", "storage_type", "location", "status"]:
         if args.get(key):
             q += f" AND a.{key}=?"
             p.append(args[key])
@@ -102,7 +106,7 @@ def get_events(asset_id):
                             (asset_id,)).fetchall()
 
 
-def add_event(asset_id, f, cost, set_status=None, status_reason=None):
+def add_event(asset_id, f, cost, set_status=None, status_category=None, status_detail=None):
     """Save one maintenance event; optionally change the asset's status and current error in the same commit."""
     db = get_db()
     db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
@@ -110,8 +114,8 @@ def add_event(asset_id, f, cost, set_status=None, status_reason=None):
                (asset_id, f["event_date"], f["fault_category"], f["fault_description"],
                 f["action_taken"], f["technician"], cost))
     if set_status:
-        db.execute("UPDATE assets SET status=?, status_reason=? WHERE asset_id=?",
-                   (set_status, status_reason, asset_id))
+        db.execute("UPDATE assets SET status=?, status_category=?, status_detail=? WHERE asset_id=?",
+                   (set_status, status_category, status_detail, asset_id))
     db.commit()
 
 
@@ -129,44 +133,68 @@ def fault_history(limit=None):
 
 
 # ---- Dashboard --------------------------------------------------------------
+def _pairs(sql):
+    return [(r[0], r[1]) for r in get_db().execute(sql).fetchall()]
+
+
+def _bars(pairs):
+    """[(label, count)] -> [(label, count, percent_of_largest)] for the bar charts."""
+    pairs = list(pairs)
+    biggest = max([n for _, n in pairs] + [1])
+    return [(str(label), n, round(n * 100 / biggest)) for label, n in pairs]
+
+
 def dashboard_data():
-    """Everything the dashboard shows, computed with SQL (COUNT, GROUP BY, JOIN)."""
+    """Everything the dashboard shows, all computed from the same tables with SQL.
+    Charts count ACTIVE assets, so they always add up to stats['total']."""
     db = get_db()
     one = lambda sql: db.execute(sql).fetchone()[0]
     stats = {
         "total": one("SELECT COUNT(*) FROM assets WHERE active=1"),
         "operational": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Operational'"),
-        "faulty": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Faulty'"),
-        "repair": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Under Repair'"),
-        "out_of_warranty": one("SELECT COUNT(*) FROM assets WHERE active=1 AND warranty_expiry < date('now')"),
         "attention": one(f"SELECT COUNT(*) FROM assets a WHERE {attention_sql()}"),
         "retired": one("SELECT COUNT(*) FROM assets WHERE active=0"),
+        "faulty": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Faulty'"),
+        "repair": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Under Repair'"),
         "events": one("SELECT COUNT(*) FROM maintenance"),
+        "out_of_warranty": one("SELECT COUNT(*) FROM assets WHERE active=1 AND warranty_expiry < date('now')"),
         "total_cost": one("SELECT COALESCE(SUM(cost_usd),0) FROM maintenance"),
     }
 
-    def dist(col):
-        rows = db.execute(f"SELECT {col} AS label, COUNT(*) AS n FROM assets WHERE active=1 "
-                          f"GROUP BY {col} ORDER BY n DESC").fetchall()
-        mx = max([r["n"] for r in rows] or [1])
-        return [(str(r["label"]), r["n"], round(r["n"] * 100 / mx)) for r in rows]
+    in_warranty, out_warranty = db.execute(
+        "SELECT COALESCE(SUM(CASE WHEN warranty_expiry >= date('now') THEN 1 ELSE 0 END),0), "
+        "COALESCE(SUM(CASE WHEN warranty_expiry < date('now') THEN 1 ELSE 0 END),0) "
+        "FROM assets WHERE active=1").fetchone()
 
     charts = {
-        "RAM (GB)": [(f"{l} GB", n, w) for l, n, w in dist("ram_gb")],
-        "Storage type": dist("storage_type"),
-        "CPU family": dist("cpu_family"),
-        "Assets per location": dist("location"),
+        "CPU family": _bars(_pairs(
+            "SELECT cpu_family, COUNT(*) AS n FROM assets WHERE active=1 GROUP BY cpu_family ORDER BY n DESC")),
+        "GPU": _bars(_pairs(
+            "SELECT CASE WHEN gpu IS NULL OR TRIM(gpu)='' OR LOWER(gpu) LIKE '%integrated%' "
+            "THEN 'Integrated' ELSE TRIM(gpu) END AS g, COUNT(*) AS n FROM assets WHERE active=1 "
+            "GROUP BY g ORDER BY n DESC")),
+        "RAM (GB)": _bars((f"{gb} GB", n) for gb, n in _pairs(
+            "SELECT ram_gb, COUNT(*) AS n FROM assets WHERE active=1 GROUP BY ram_gb ORDER BY ram_gb")),
+        "Storage type": _bars(_pairs(
+            "SELECT storage_type, COUNT(*) AS n FROM assets WHERE active=1 GROUP BY storage_type ORDER BY n DESC")),
+        "Assets per location": _bars(_pairs(
+            "SELECT location, COUNT(*) AS n FROM assets WHERE active=1 GROUP BY location ORDER BY n DESC")),
+        "Warranty": _bars([("In warranty", in_warranty), ("Out of warranty", out_warranty)]),
     }
-    cat_rows = db.execute("SELECT fault_category AS label, COUNT(*) AS n FROM maintenance "
-                          "GROUP BY fault_category ORDER BY n DESC").fetchall()
-    mx = max([r["n"] for r in cat_rows] or [1])
-    fault_cats = [(r["label"], r["n"], round(r["n"] * 100 / mx)) for r in cat_rows]
+
+    # Failure analysis: every drop-down category is always shown (0 if unused). Any stored value
+    # that is not in the list is counted as "Other", so no event is ever left out of the chart.
+    counts = {cat: 0 for cat in FAULT_CATEGORIES}
+    for label, n in _pairs("SELECT fault_category, COUNT(*) FROM maintenance GROUP BY fault_category"):
+        counts[label if label in counts else "Other"] += n
+    fault_cats = _bars(sorted(counts.items(), key=lambda kv: -kv[1]))
+
     top_assets = db.execute(
         "SELECT m.asset_id, a.model, COUNT(*) AS n, SUM(m.cost_usd) AS cost FROM maintenance m "
         "JOIN assets a ON a.asset_id=m.asset_id GROUP BY m.asset_id ORDER BY n DESC, cost DESC LIMIT 5"
     ).fetchall()
     attention = db.execute(
-        f"SELECT a.asset_id, a.model, a.location, a.status, a.status_reason "
+        f"SELECT a.asset_id, a.model, a.location, a.status, a.status_category, a.status_detail "
         f"FROM assets a WHERE {attention_sql()} ORDER BY a.asset_id").fetchall()
     return {"stats": stats, "charts": charts, "fault_cats": fault_cats,
             "top_assets": top_assets, "attention": attention}

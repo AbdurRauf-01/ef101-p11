@@ -12,6 +12,7 @@ CREATE TABLE assets (
     cpu             TEXT NOT NULL,                    -- full model, e.g. Intel Core i5-12400
     cpu_family      TEXT NOT NULL,                    -- grouping used for filtering, e.g. Core i5
     ram_gb          INTEGER NOT NULL CHECK (ram_gb > 0),
+    ram_type        TEXT NOT NULL CHECK (ram_type IN ('DDR1','DDR2','DDR3','DDR4','DDR5')),
     storage_type    TEXT NOT NULL CHECK (storage_type IN ('SSD','HDD','NVMe','Hybrid')),
     storage_gb      INTEGER NOT NULL CHECK (storage_gb > 0),
     gpu             TEXT,                             -- NULL / empty = integrated only
@@ -22,19 +23,23 @@ CREATE TABLE assets (
     warranty_expiry TEXT NOT NULL,                    -- warranty status is COMPUTED from this
     status          TEXT NOT NULL DEFAULT 'Operational'
                     CHECK (status IN ('Operational','Faulty','Under Repair')),
-    status_reason   TEXT,                             -- current error: NULL when Operational (N/A); required otherwise, 'Unknown' allowed
-    active          INTEGER NOT NULL DEFAULT 1        -- 0 = retired (kept for history)
+    status_category TEXT,                             -- current error category; NULL when Operational (shown N/A)
+    status_detail   TEXT,                             -- current error details; NULL when Operational
+    active          INTEGER NOT NULL DEFAULT 1,       -- 0 = retired (kept for history)
+    -- an Operational asset has no current error; a Faulty / Under Repair asset must state one
+    CHECK ((status = 'Operational' AND status_category IS NULL AND status_detail IS NULL)
+        OR (status <> 'Operational' AND status_category IS NOT NULL AND status_detail IS NOT NULL))
 );
 
 CREATE TABLE maintenance (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    asset_id         TEXT NOT NULL REFERENCES assets(asset_id),
-    event_date       TEXT NOT NULL,
-    fault_category   TEXT NOT NULL,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id          TEXT NOT NULL REFERENCES assets(asset_id),
+    event_date        TEXT NOT NULL,
+    fault_category    TEXT NOT NULL,                  -- one of the fault category drop-down options
     fault_description TEXT NOT NULL,
-    action_taken     TEXT NOT NULL,
-    technician       TEXT NOT NULL,
-    cost_usd         REAL NOT NULL DEFAULT 0 CHECK (cost_usd >= 0)   -- US dollars
+    action_taken      TEXT NOT NULL,
+    technician        TEXT NOT NULL,
+    cost_usd          REAL NOT NULL DEFAULT 0 CHECK (cost_usd >= 0)   -- US dollars
 );
 
 CREATE INDEX idx_maint_asset ON maintenance(asset_id);

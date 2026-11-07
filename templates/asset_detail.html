@@ -22,7 +22,7 @@
 <dl>
   <dt>Manufacturer / model</dt><dd>{{ a.manufacturer }} {{ a.model }}</dd>
   <dt>CPU</dt><dd>{{ a.cpu }} ({{ a.cpu_family }})</dd>
-  <dt>RAM</dt><dd>{{ a.ram_gb }} GB</dd>
+  <dt>RAM</dt><dd>{{ a.ram_gb }} GB {{ a.ram_type }}</dd>
   <dt>Storage</dt><dd>{{ a.storage_type }}, {{ a.storage_gb }} GB</dd>
   <dt>GPU</dt><dd>{{ a.gpu or 'Integrated only' }}</dd>
   <dt>Operating system</dt><dd>{{ a.os }}</dd>
@@ -32,7 +32,7 @@
 <div class="card"><h2>Status &amp; warranty</h2>
 <dl>
   <dt>Operational status</dt><dd><span class="badge b-{{ a.status|replace(' ', '-') }}">{{ a.status }}</span></dd>
-  <dt>Current error</dt><dd>{% if a.status == 'Operational' %}N/A{% else %}{{ a.status_reason or 'Unknown' }}{% endif %}</dd>
+  <dt>Current error</dt><dd>{% if a.status == 'Operational' %}N/A{% else %}{{ a.status_category or 'Unknown' }}: {{ a.status_detail or 'Unknown' }}{% endif %}</dd>
   <dt>Purchase date</dt><dd>{{ a.purchase_date }}</dd>
   <dt>Warranty expiry</dt><dd>{{ a.warranty_expiry }} <span class="badge b-{{ warranty|replace(' ', '-') }}">{{ warranty }}</span></dd>
   <dt>Maintenance events</dt><dd>{{ events|length }}</dd>
@@ -55,16 +55,17 @@
 <form method="post" action="{{ url_for('maintenance_add', asset_id=a.asset_id) }}" novalidate>
 <div class="formgrid">
   <div><label>Date *</label><input type="date" name="event_date" value="{{ today }}"></div>
-  <div><label>Fault category *</label><input name="fault_category" list="cats" placeholder="e.g. Disk failure">
-    <datalist id="cats"><option>Disk failure</option><option>Overheating</option><option>PSU failure</option>
-    <option>RAM fault</option><option>OS corruption</option><option>Network issue</option><option>Display issue</option></datalist></div>
+  <div><label>Fault category *</label><select name="fault_category"><option value="">— choose —</option>
+    {% for o in fault_categories %}<option>{{ o }}</option>{% endfor %}</select></div>
   <div><label>Fault description *</label><input name="fault_description"></div>
   <div><label>Action taken *</label><input name="action_taken"></div>
   <div><label>Technician *</label><input name="technician"></div>
   <div><label>Cost ($)</label><input name="cost" value="0"></div>
   <div><label>Update asset status to</label><select name="set_status"><option value="">(no change)</option>
     <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
-  <div><label>Current error (required for Faulty / Under Repair)</label><input name="status_reason" placeholder="Describe the fault, or Unknown"></div>
+  <div><label>Current error category (Faulty / Under Repair)</label><select name="status_category"><option value="">— choose —</option>
+    {% for o in error_categories %}<option>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Current error details (Faulty / Under Repair)</label><input name="status_detail" placeholder="Describe the fault, or Unknown"></div>
 </div>
 <p><button class="btn" type="submit">Log event</button></p>
 </form></div>

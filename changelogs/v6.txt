@@ -1,0 +1,7 @@
+What changed:
+
+- Fault category is now a drop-down: Disk failure, Overheating, Network issue, RAM fault, OS corruption, Display issue, PSU failure, plus Other and Unknown. The failure chart always lists every category, even at 0, so Other and Unknown appear as entries.
+- Current error has two fields. The category drop-down has the same seven, plus N/A, Unknown, and Other. The detail is a free-text field. Faulty and Under Repair require both. The database enforces this too, so a Faulty asset can’t be saved without them.
+- Stat cards are ordered, four per row. “Faulty events” is labelled “Fault events”.
+- Hardware charts are ordered, in a 3-column grid: CPU family, GPU, RAM, storage type, assets per location, and warranty (in vs out). The GPU chart shows “Integrated” for machines without a discrete GPU, and the card name otherwise.
+- RAM type is a required DDR1–DDR5 drop-down on every asset. It shows on the detail page, the asset list, and the CSV export, and it’s filterable.

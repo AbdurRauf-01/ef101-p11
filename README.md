@@ -10,7 +10,7 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 pip install flask
 python seed.py        # optional: wipes and recreates inventory.db with demo data
 python app.py         # open http://127.0.0.1:5000
-python test_app.py    # runs 59 checks on a temporary database, prints a results table
+python test_app.py    # runs 90 checks on a temporary database, prints a results table
 ```
 No Internet is needed: the app uses no external libraries (plain CSS in `static/style.css`; dashboard charts are CSS bars).
 
@@ -27,7 +27,10 @@ No Internet is needed: the app uses no external libraries (plain CSS in `static/
 
 ## Rules to document in the report
 - **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately in the dashboard's Fault history, whatever the status.
-- **Current error**: a Faulty or Under Repair asset must state its current error (or `Unknown`). Operational assets show N/A. Set on the edit form or when logging an event.
+- **Current error**: a Faulty or Under Repair asset must choose an error category (the fault list plus N/A, Unknown, Other) and write the details (or `Unknown`). Operational assets show N/A. Set on the edit form or when logging an event.
+- **Fault categories**: maintenance events use a fixed drop-down (Disk failure, Overheating, Network issue, RAM fault, OS corruption, Display issue, PSU failure, Other, Unknown). The failure chart always shows every category; anything unexpected is counted as Other.
+- **RAM type**: DDR1 to DDR5 drop-down, required for every asset (12th to 14th gen Intel CPUs can take DDR4 or DDR5, so the type is recorded per machine).
+- **Dashboard charts** are computed from the same active-asset query as the totals, so the charts always add up to the total.
 - **Warranty label**: `WARRANTY_SOON_DAYS` (30) at the top of `queries.py` sets the Expiring soon window.
 - **Warranty status** is computed from `warranty_expiry` (Active / Expiring soon / Expired), never stored.
 - **Retire** sets `active = 0`; the row and its history are kept. Reactivate reverses it.

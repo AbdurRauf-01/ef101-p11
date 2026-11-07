@@ -37,15 +37,14 @@ FAULTS = {
 }
 TECHS = ["A. Khan", "S. Ahmed", "R. Ali"]
 
-
-# Current-error texts given to the Faulty / Under Repair demo assets (in order). "Unknown" is a valid answer.
+# Current error (category, details) given to the Faulty / Under Repair demo assets, in order.
 CURRENT_ERRORS = [
-    "Intermittent RAM errors, memtest failing",
-    "Unknown",
-    "Drive not detected by BIOS, replacement ordered",
-    "Overheating under load, fan replacement pending",
-    "No video output, GPU being checked",
-    "Unknown",
+    ("RAM fault", "Intermittent errors, memtest failing"),
+    ("Unknown", "Unknown"),
+    ("Disk failure", "Drive not detected by BIOS, replacement ordered"),
+    ("Overheating", "Overheating under load, fan replacement pending"),
+    ("Display issue", "No video output, GPU being checked"),
+    ("Unknown", "Unknown"),
 ]
 
 
@@ -107,15 +106,21 @@ def main():
         a[15] = 0
         a[14] = "Faulty"
 
-    # Current error: every Faulty / Under Repair asset gets one; Operational assets stay NULL (shown as N/A).
-    reasons = {}
+    # Current error: every Faulty / Under Repair asset gets one; Operational assets stay NULL (shown N/A).
+    current = {}
     for n, a in enumerate(x for x in assets if x[14] != "Operational"):
-        reasons[a[0]] = CURRENT_ERRORS[n % len(CURRENT_ERRORS)]
-    rows = [a[:15] + [reasons.get(a[0]), a[15]] for a in assets]
+        current[a[0]] = CURRENT_ERRORS[n % len(CURRENT_ERRORS)]
+    rows = []
+    for a in assets:
+        cat, detail = current.get(a[0], (None, None))
+        # RAM type: every CPU in the demo list supports DDR4, so DDR4 is used for all demo assets.
+        ram_type = "DDR4"
+        rows.append([a[0], a[1], a[2], a[3], a[4], a[5], ram_type, a[6], a[7], a[8], a[9], a[10],
+                     a[11], a[12], a[13], a[14], cat, detail, a[15]])
     conn.executemany(
-        "INSERT INTO assets (asset_id,manufacturer,model,cpu,cpu_family,ram_gb,storage_type,storage_gb,"
-        "gpu,os,ip_address,location,purchase_date,warranty_expiry,status,status_reason,active) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        "INSERT INTO assets (asset_id,manufacturer,model,cpu,cpu_family,ram_gb,ram_type,storage_type,"
+        "storage_gb,gpu,os,ip_address,location,purchase_date,warranty_expiry,status,status_category,"
+        "status_detail,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     conn.executemany(
         "INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
         "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)", events)

@@ -28,7 +28,7 @@
 <rect x="656" y="148" width="5" height="72" rx="2" fill="#1a7f4b"/>
 <text x="670" y="170" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Validation  (app.py)</text>
 <text x="670" y="188" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">validate_asset(): rejects bad</text>
-<text x="670" y="203" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">input; Faulty needs a reason</text>
+<text x="670" y="203" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">input; Faulty needs an error</text>
 <rect x="404" y="232" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db" stroke-width="1"/>
 <rect x="404" y="232" width="5" height="72" rx="2" fill="#1a7f4b"/>
 <text x="418" y="254" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Filters  (queries.py)</text>
@@ -43,7 +43,7 @@
 <rect x="404" y="316" width="5" height="72" rx="2" fill="#1a7f4b"/>
 <text x="418" y="338" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">Dashboard  (queries.py)</text>
 <text x="418" y="356" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">COUNT / GROUP BY for totals and</text>
-<text x="418" y="371" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">charts; fault_history() lists events</text>
+<text x="418" y="371" font-size="11.5" font-weight="normal" fill="#64707d" text-anchor="start">charts (all add up to the total)</text>
 <rect x="656" y="316" width="238" height="72" rx="6" fill="#f4f6f9" stroke="#c9d1db" stroke-width="1"/>
 <rect x="656" y="316" width="5" height="72" rx="2" fill="#1a7f4b"/>
 <text x="670" y="338" font-size="13.5" font-weight="bold" fill="#1d2733" text-anchor="start">CSV export  (app.py)</text>
@@ -64,11 +64,11 @@
 <rect x="1014" y="148" width="342" height="166" rx="6" fill="#f4f6f9" stroke="#c9d1db" stroke-width="1"/>
 <text x="1028" y="170" font-size="14" font-weight="bold" fill="#1d2733" text-anchor="start">assets</text>
 <text x="1028" y="192" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">asset_id (PK) · manufacturer · model</text>
-<text x="1028" y="209" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">cpu · cpu_family · ram_gb</text>
+<text x="1028" y="209" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">cpu · cpu_family · ram_gb · ram_type</text>
 <text x="1028" y="226" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">storage_type · storage_gb · gpu · os</text>
 <text x="1028" y="243" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">ip_address · location</text>
 <text x="1028" y="260" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">purchase_date · warranty_expiry</text>
-<text x="1028" y="277" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">status · status_reason (current error)</text>
+<text x="1028" y="277" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">status · current error (category, detail)</text>
 <text x="1028" y="294" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">active (0 = retired, kept)</text>
 <line x1="1185" y1="314" x2="1185" y2="340" stroke="#14213d" stroke-width="2"/>
 <text x="1195" y="330" font-size="11.5" font-weight="bold" fill="#14213d" text-anchor="start">1 asset : N events</text>
@@ -123,7 +123,7 @@
 <text x="890" y="718" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">style.css: all styling, no libraries</text>
 <rect x="724" y="734" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="752" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">test_app.py</text>
-<text x="890" y="752" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">52 automated checks on a temporary database</text>
+<text x="890" y="752" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">90 automated checks on a temporary database</text>
 <rect x="724" y="768" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="786" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">README.md</text>
 <text x="890" y="786" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">how to run, rules, tool and AI disclosure</text>
