@@ -47,7 +47,8 @@
     <div><label id="fx-act">Actions to be taken</label><input name="status_action" value="{{ a.get('status_action','') or '' }}" placeholder="Planned fix, or what was just done"></div>
     <div><label id="fx-tech">Technician</label><input name="status_technician" value="{{ a.get('status_technician','') or '' }}" placeholder="Required when Under Repair"></div>
     <div><label id="fx-date">Date</label><input type="date" name="fault_date" value="{{ a.get('fault_date') or today }}"></div>
-    <div><label id="fx-cost">Cost of this step ($)</label><input name="fault_cost" value="{{ a.get('fault_cost') or 0 }}"></div>
+    <div><label title="Spent so far on this fault (the sum of its steps)">Original Cost ($)</label><input value="{{ open_total or 0 }}" readonly></div>
+    <div><label id="fx-cost">Increase in Cost ($)</label><input name="fault_increase" value="0"></div>
   </div>
 </div>
 
@@ -88,7 +89,6 @@
     mark('fx-act', closing ? 'Action taken' : 'Actions to be taken', closing);
     mark('fx-tech', 'Technician', closing || s === 'Under Repair');
     mark('fx-date', 'Date', open || closing);
-    mark('fx-cost', closing ? 'Cost of the fix ($)' : 'Cost of this step ($)', false);
   }
   st.addEventListener('change', sync);
   sync();

@@ -1,10 +1,13 @@
 """EF101-P11 Computer Hardware Inventory and Maintenance System.
-Run: python seed.py   (once, creates demo data)
-     python app.py    (then open http://127.0.0.1:5000)
+Run: python app.py   (or double-click start.command / start.bat). Data is kept in inventory.db in this folder.
+Optional demo data: python seed.py
 """
+import argparse
 import csv
 import io
 import ipaddress
+import os
+import socket
 import sqlite3
 from datetime import date, datetime, timedelta
 
@@ -12,7 +15,7 @@ from flask import (Flask, Response, flash, redirect, render_template, request,
                    send_from_directory, url_for)
 
 import queries
-from db import BASE, DB_PATH
+from db import BASE, DB_PATH, ensure_database
 from queries import (CURRENT_ERROR_STATUSES, CURRENT_FAULT_FIELDS, FAULT_CATEGORIES, FIELDS,
                      RAM_TYPES, SORT_COLUMNS, WARRANTY_SOON_DAYS)
 
@@ -141,9 +144,9 @@ def parse_cost(text):
 def fault_box(form):
     """The Current fault box on the Edit / Add form, as typed, plus its date and cost."""
     box = {k: (form.get(k) or "").strip() for k in
-           ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "fault_cost"]}
+           ["status_category", "status_detail", "status_action", "status_technician", "fault_date", "fault_increase"]}
     box["date"] = parse_date(box["fault_date"])
-    box["cost"], box["cost_error"] = parse_cost(box["fault_cost"])
+    box["cost"], box["cost_error"] = parse_cost(box["fault_increase"])     # the increase, added now
     return box
 
 
@@ -296,7 +299,8 @@ def asset_new():
                 queries.add_location(name, existing_or_new_prefix(name, True), subnet)
             queries.insert_asset(c, step=step)
         except sqlite3.IntegrityError as e:
-            flash(f"Database rejected the record: {e}", "danger")
+            message = "Choose a place from the list." if "FOREIGN KEY" in str(e) else f"Database rejected the record: {e}"
+            flash(message, "danger")
             return render_template("asset_form.html", a=form, new=True, current_status=None)
         flash(f"Asset {c['asset_id']} added (IP {c['ip_address'] or 'Not Assigned'}).", "success")
         return redirect(url_for("asset_detail", asset_id=c["asset_id"]))
@@ -313,7 +317,8 @@ def asset_detail(asset_id):
     total_cost = sum(e["cost_usd"] for e in events)
     return render_template("asset_detail.html", a=a, events=events, total_cost=total_cost,
                            warranty=warranty_status(a["warranty_expiry"]), today=today(),
-                           steps=queries.get_steps(asset_id))
+                           steps=queries.get_steps(asset_id),
+                           open_total=queries.open_fault_cost(asset_id) if a["status"] in CURRENT_ERROR_STATUSES else 0)
 
 
 @app.route("/assets/<asset_id>/edit", methods=["GET", "POST"])
@@ -322,6 +327,7 @@ def asset_edit(asset_id):
     if not a:
         return render_template("message.html", title="Asset not found", text=asset_id), 404
     current_status = a["status"]
+    open_total = queries.open_fault_cost(asset_id) if current_status in CURRENT_ERROR_STATUSES else 0
     if request.method == "POST":
         form = dict(request.form)
         form["asset_id"] = asset_id                       # primary key is never changed
@@ -341,7 +347,7 @@ def asset_edit(asset_id):
         if errors:
             for e in errors:
                 flash(e, "danger")
-            return render_template("asset_form.html", a=form, new=False, current_status=current_status)
+            return render_template("asset_form.html", a=form, new=False, current_status=current_status, open_total=open_total)
         if is_new_loc:
             queries.add_location(name, existing_or_new_prefix(name, True), subnet)
         if closing:
@@ -362,7 +368,7 @@ def asset_edit(asset_id):
     # the form template uses a.get(...), which a sqlite3.Row does not have: convert to a
     # dict and show empty (NULL) fields as blank instead of the text "None"
     a = {k: ("" if v is None else v) for k, v in dict(a).items()}
-    return render_template("asset_form.html", a=a, new=False, current_status=current_status)
+    return render_template("asset_form.html", a=a, new=False, current_status=current_status, open_total=open_total)
 
 
 @app.route("/assets/<asset_id>/retire", methods=["POST"])
@@ -385,7 +391,7 @@ def maintenance_add(asset_id):
     if not asset:
         return render_template("message.html", title="Asset not found", text=asset_id), 404
     f = {k: (request.form.get(k) or "").strip() for k in
-         ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost"]}
+         ["event_date", "fault_category", "fault_description", "action_taken", "technician", "cost", "increase_cost"]}
     new_status = request.form.get("set_status")
     errors = []
     d = parse_date(f["event_date"])
@@ -397,9 +403,11 @@ def maintenance_add(asset_id):
         errors.append("Choose the status the asset will have: Operational, Faulty or Under Repair.")
     if f["fault_category"] and f["fault_category"] not in FAULT_CATEGORIES:
         errors.append("Choose a fault category from the list.")
-    cost, cost_error = parse_cost(f["cost"])
-    if cost_error:
-        errors.append(cost_error)
+    base, base_error = parse_cost(f["cost"])              # Original Cost: typed for an Operational PC
+    increase, increase_error = parse_cost(f["increase_cost"])
+    for problem in (base_error, increase_error):
+        if problem:
+            errors.append(problem)
     if new_status == "Operational":
         errors += fix_problems(f["fault_category"], f["fault_description"], f["action_taken"], f["technician"])
     elif new_status == "Under Repair" and not f["technician"]:
@@ -411,12 +419,15 @@ def maintenance_add(asset_id):
             flash(e, "danger")
         return redirect(url_for("asset_detail", asset_id=asset_id))
     was_open = asset["status"] in CURRENT_ERROR_STATUSES
+    # cost added by this event: an open fault already holds its steps (Original Cost is ignored);
+    # an Operational PC's Original Cost is part of what is added now
+    added = increase if was_open else increase + base
     current = None
     if new_status in CURRENT_ERROR_STATUSES:
         current = {"category": f["fault_category"], "detail": f["fault_description"],
                    "action": f["action_taken"], "technician": f["technician"],
                    "date": asset["status_date"] if (was_open and asset["status_date"]) else f["event_date"]}
-    queries.log_event(asset_id, f, cost, new_status, current)
+    queries.log_event(asset_id, f, added, new_status, current)
     if new_status == "Operational" and was_open:
         flash("Fault closed. The asset is Operational and the fault is recorded in the history as one entry.", "success")
     elif new_status == "Operational":
@@ -511,7 +522,28 @@ def db_missing(e):
                            text=f"{e}. If inventory.db is missing, run: python seed.py"), 500
 
 
+def free_port(start=5000, tries=100):
+    """The first free port from `start` on this computer, so several copies of the app can run side by side."""
+    for port in range(start, start + tries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind(("127.0.0.1", port))
+                return port
+            except OSError:
+                continue
+    raise SystemExit(f"No free port found between {start} and {start + tries - 1}.")
+
+
 if __name__ == "__main__":
-    if not DB_PATH.exists():
-        print("inventory.db not found - run 'python seed.py' first.")
-    app.run(debug=True)
+    parser = argparse.ArgumentParser(description="EF101-P11 Hardware Inventory")
+    parser.add_argument("--port", type=int, help="port to use (default: the first free port from 5000)")
+    args = parser.parse_args()
+    created = ensure_database()           # first launch only: an empty database; existing data is kept
+    port = args.port or int(os.environ.get("PORT", 0)) or free_port()
+    print("Hardware Inventory")
+    print(f"  Open in your browser:  http://127.0.0.1:{port}")
+    print(f"  Data file:             {DB_PATH}")
+    if created:
+        print("  A new, empty database was created. Add assets, or run 'python seed.py' for demo data.")
+    print("  Press Ctrl+C to stop.")
+    app.run(host="127.0.0.1", port=port, debug=True, use_reloader=False)

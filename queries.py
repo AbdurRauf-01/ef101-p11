@@ -178,6 +178,12 @@ def _close_fault(db, asset_id, ev):
     db.execute("DELETE FROM fault_steps WHERE asset_id=?", (asset_id,))
 
 
+def open_fault_cost(asset_id):
+    """Cost recorded so far for the open fault of this PC (the sum of its steps)."""
+    return get_db().execute("SELECT COALESCE(SUM(cost_usd),0) FROM fault_steps WHERE asset_id=?",
+                            (asset_id,)).fetchone()[0]
+
+
 def get_steps(asset_id):
     return get_db().execute("SELECT * FROM fault_steps WHERE asset_id=? ORDER BY id", (asset_id,)).fetchall()
 

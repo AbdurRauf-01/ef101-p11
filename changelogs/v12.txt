@@ -1,0 +1,15 @@
+What changed:
+
+1. Cost on open faults
+- The Edit page and the Log form now show Original Cost and Increase in Cost.
+- Original Cost is the amount already spent on the fault. It’s read-only, so it no longer resets to 0.
+- Increase in Cost is the new spend. Saving it adds a step.
+- Closing the fault writes one history entry with Original Cost plus Increase.
+- On the Log form for an Operational PC, Original Cost is still editable, because it’s the cost of that event.
+
+2. Reset Data command
+- seed.py now asks you to type YES before it erases anything. The README no longer tells you to run it before every launch.
+
+3. Running several versions
+- The app picks the first free port from 5000 and prints its address and data file. v7 and v8 can now run at the same time, each with its own data.
+- You can also pick a port with python app.py --port 5005.

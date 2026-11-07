@@ -85,7 +85,10 @@
   <div><label id="lbl-desc">Fault description</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}"></div>
   <div><label id="lbl-act">Action taken</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}"></div>
   <div><label id="lbl-tech">Technician</label><input name="technician" value="{{ pref.status_technician if pref else '' }}"></div>
-  <div><label>Cost ($)</label><input name="cost" value="0"></div>
+  <div><label title="Spent so far on this fault (the sum of its steps)">Original Cost ($)</label>
+    {% if pref %}<input name="cost" value="{{ open_total }}" readonly>
+    {% else %}<input name="cost" value="0">{% endif %}</div>
+  <div><label>Increase in Cost ($)</label><input name="increase_cost" value="0"></div>
   <div><label>Update asset status to *</label><select name="set_status" id="ev-status">
     <option value="">— choose —</option>
     <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>

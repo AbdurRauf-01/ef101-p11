@@ -473,19 +473,19 @@ check("Closed fault is on the Fault History page", "GET /maintenance", "the one 
 client.post("/assets/new", data={**GOOD, "asset_id": "HIST-2"})
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Faulty", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Check cable", "status_technician": "",
-            "fault_date": "2026-03-08", "fault_cost": "0"})
+            "fault_date": "2026-03-08", "fault_increase": "0"})
 check("Fault set on the Edit form stays open", "Operational -> Faulty on the Edit form",
       "no history row; the action is a step",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 0
       and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2' AND action='Check cable'") == 1)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "",
-            "fault_date": "2026-03-12", "fault_cost": "0"})
+            "fault_date": "2026-03-12", "fault_increase": "0"})
 check("Under Repair on the Edit form needs a technician", "Under Repair, technician blank", "rejected, still Faulty",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Faulty'") == 1)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
-            "fault_date": "2026-03-12", "fault_cost": "0"})
+            "fault_date": "2026-03-12", "fault_increase": "0"})
 check("Progress on the Edit form is a step, not history", "Faulty -> Under Repair with a new action",
       "no history row; new step; status updated",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 0
@@ -494,17 +494,17 @@ check("Progress on the Edit form is a step, not history", "Faulty -> Under Repai
 steps_now = count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2'")
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
-            "fault_date": "2026-03-12", "fault_cost": "0"})
+            "fault_date": "2026-03-12", "fault_increase": "0"})
 check("Saving again without changes adds no step", "same data saved twice", "no new step",
       count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='HIST-2'") == steps_now)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Fitted panel", "status_technician": "",
-            "fault_date": "2026-03-20", "fault_cost": "15"})
+            "fault_date": "2026-03-20", "fault_increase": "15"})
 check("Closing on the Edit form needs every field", "Operational, technician blank", "rejected, still open",
       count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Under Repair'") == 1)
 client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational", "status_category": "Display issue",
             "status_detail": "No picture", "status_action": "Fitted panel", "status_technician": "Ali",
-            "fault_date": "2026-03-20", "fault_cost": "15"})
+            "fault_date": "2026-03-20", "fault_increase": "15"})
 check("Closing on the Edit form writes one entry", "Operational with every field",
       "one entry with all steps; cost 15; steps cleared",
       count("SELECT COUNT(*) FROM maintenance WHERE asset_id='HIST-2'") == 1
@@ -657,20 +657,20 @@ check("Faulty step is saved, not history", "Faulty, action Step A", "step saved;
       and count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1'") == 0)
 client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-02", "fault_category": "RAM fault",
             "fault_description": "Memory errors", "action_taken": "Step B", "technician": "Ali",
-            "cost": "10", "set_status": "Under Repair"})
+            "cost": "0", "increase_cost": "10", "set_status": "Under Repair"})
 client.post("/assets/STEP-1/edit", data={**GOOD, "asset_id": "STEP-1", "status": "Under Repair", "status_category": "RAM fault",
             "status_detail": "Memory errors", "status_action": "Step B", "status_technician": "Ali",
-            "fault_date": "2026-04-03", "fault_cost": "0"})
+            "fault_date": "2026-04-03", "fault_increase": "0"})
 check("Unchanged action on the Edit form adds nothing", "Step B again, cost 0", "no new step",
       count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 2)
 client.post("/assets/STEP-1/edit", data={**GOOD, "asset_id": "STEP-1", "status": "Under Repair", "status_category": "RAM fault",
             "status_detail": "Memory errors", "status_action": "Step B", "status_technician": "Ali",
-            "fault_date": "2026-04-03", "fault_cost": "5"})
+            "fault_date": "2026-04-03", "fault_increase": "5"})
 check("A cost alone is a step without repeating the action", "same action, cost 5", "cost-only step (action blank)",
       count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1' AND action='' AND cost_usd=5") == 1)
 client.post("/assets/STEP-1/maintenance", data={"event_date": "2026-04-05", "fault_category": "RAM fault",
             "fault_description": "Memory errors", "action_taken": "Step C", "technician": "Ali",
-            "cost": "2", "set_status": "Operational"})
+            "cost": "0", "increase_cost": "2", "set_status": "Operational"})
 rows = count("SELECT COUNT(*) FROM maintenance WHERE asset_id='STEP-1'")
 text = client.get("/assets/STEP-1").get_data(as_text=True)
 check("Closing combines every step into one entry", "close with Step C, cost 2", "one entry; Step B listed once; cost 17",
@@ -681,6 +681,69 @@ check("Closing combines every step into one entry", "close with Step C, cost 2",
       and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='STEP-1'") == 0)
 check("Closed PC shows dashes in Current fault", "GET /assets/STEP-1", "a row of '-'",
       "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in text)
+
+# 19. Cost: Original Cost is what was spent so far; Increase in Cost is added now. Persistence and ports.
+client.post("/assets/new", data={**GOOD, "asset_id": "COST-1"})
+client.post("/assets/COST-1/maintenance", data={"event_date": "2026-05-01", "fault_category": "", "fault_description": "",
+            "action_taken": "Part ordered", "technician": "", "cost": "0", "increase_cost": "80", "set_status": "Faulty"})
+check("Increase on an open fault is a step", "Faulty, Increase $80", "step of $80",
+      count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='COST-1' AND cost_usd=80") == 1)
+page = client.get("/assets/COST-1").get_data(as_text=True)
+check("Original Cost shows what was spent", "GET /assets/COST-1", "read-only Original Cost of 80.0",
+      'value="80.0" readonly' in page)
+client.post("/assets/COST-1/maintenance", data={"event_date": "2026-05-02", "fault_category": "Disk failure",
+            "fault_description": "Drive dead", "action_taken": "Part ordered", "technician": "Ali",
+            "cost": "999", "increase_cost": "0", "set_status": "Under Repair"})
+check("Original Cost cannot be typed over on an open fault", "Original Cost 999 posted, Increase 0",
+      "no new cost; still $80", count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='COST-1'") == 1
+      and count("SELECT COUNT(*) FROM fault_steps WHERE asset_id='COST-1' AND cost_usd=80") == 1)
+client.post("/assets/COST-1/maintenance", data={"event_date": "2026-05-03", "fault_category": "Disk failure",
+            "fault_description": "Drive dead", "action_taken": "Replaced drive", "technician": "Ali",
+            "cost": "0", "increase_cost": "0", "set_status": "Operational"})
+check("Closing with no increase keeps the total at $80", "close, Increase 0", "one entry costing exactly 80",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-1' AND cost_usd=80") == 1)
+
+client.post("/assets/new", data={**GOOD, "asset_id": "COST-2"})
+client.post("/assets/COST-2/edit", data={**GOOD, "asset_id": "COST-2", "status": "Faulty", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Check cable", "status_technician": "",
+            "fault_date": "2026-05-04", "fault_increase": "80"})
+edit_page = client.get("/assets/COST-2/edit").get_data(as_text=True)
+check("Edit page: Original Cost keeps the amount", "GET /assets/COST-2/edit", "Original Cost 80.0, not 0",
+      'value="80.0" readonly' in edit_page)
+client.post("/assets/COST-2/edit", data={**GOOD, "asset_id": "COST-2", "status": "Operational", "status_category": "Display issue",
+            "status_detail": "No picture", "status_action": "Replaced panel", "status_technician": "Ali",
+            "fault_date": "2026-05-06", "fault_increase": "0"})
+check("Edit page: closing with no increase totals 80, not 160", "status Operational, Increase 0", "history cost 80",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-2' AND cost_usd=80") == 1)
+client.post("/assets/new", data={**GOOD, "asset_id": "COST-3"})
+client.post("/assets/COST-3/edit", data={**GOOD, "asset_id": "COST-3", "status": "Faulty", "status_category": "RAM fault",
+            "status_detail": "Bad stick", "status_action": "", "status_technician": "",
+            "fault_date": "2026-05-07", "fault_increase": "20"})
+client.post("/assets/COST-3/edit", data={**GOOD, "asset_id": "COST-3", "status": "Operational", "status_category": "RAM fault",
+            "status_detail": "Bad stick", "status_action": "Swapped stick", "status_technician": "Ali",
+            "fault_date": "2026-05-08", "fault_increase": "20"})
+check("Increase on the closing edit is added to the Original Cost", "Original 20 + Increase 20", "history cost 40",
+      count("SELECT COUNT(*) FROM maintenance WHERE asset_id='COST-3' AND cost_usd=40") == 1)
+
+# persistence: launching again keeps every row
+before_assets = count("SELECT COUNT(*) FROM assets")
+before_events = count("SELECT COUNT(*) FROM maintenance")
+check("Launching again keeps the data", "ensure_database() on an existing database", "nothing created, nothing erased",
+      db.ensure_database() is False and count("SELECT COUNT(*) FROM assets") == before_assets
+      and count("SELECT COUNT(*) FROM maintenance") == before_events)
+
+# ports: a busy port is skipped, so a second copy of the app can start
+import socket as _socket
+busy = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+busy.bind(("127.0.0.1", 0))
+busy_port = busy.getsockname()[1]
+busy.listen(1)
+free = appmod.free_port(start=busy_port, tries=50)
+busy.close()
+check("Busy port is skipped", f"port {busy_port} already in use", "a different free port",
+      free != busy_port and free > busy_port)
+
+# seeding asks before it erases data (the answer is checked by typing YES)
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

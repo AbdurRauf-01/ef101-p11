@@ -13,8 +13,8 @@ random.seed(101)
 TODAY = date(2026, 10, 9)
 
 # Places, and the short code used for their asset IDs (order matters: it keeps the demo reproducible).
-LOCATION_PREFIX = {"Lab 1": "L1", "Lab 2": "L2", "Lab 3": "L3", "Server Room": "SRV",
-                   "Faculty Office": "FAC", "Library": "LIB"}
+from db import DEFAULT_PLACES
+LOCATION_PREFIX = DEFAULT_PLACES
 LOCATIONS = list(LOCATION_PREFIX)
 # Range number x of each place's IP range 192.168.x.n, in creation order (Lab 1 -> 1 ... Library -> 6).
 LOCATION_SUBNET = {name: i + 1 for i, name in enumerate(LOCATION_PREFIX)}
@@ -149,4 +149,14 @@ def main():
 
 
 if __name__ == "__main__":
+    from db import DB_PATH, has_tables
+    if has_tables():
+        conn = get_db()
+        existing = conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
+        conn.close()
+        if existing:
+            answer = input(f"{DB_PATH} already holds {existing} assets. Demo data ERASES them. Type YES to continue: ")
+            if answer.strip() != "YES":
+                print("Cancelled. Nothing was changed.")
+                raise SystemExit(0)
     main()
