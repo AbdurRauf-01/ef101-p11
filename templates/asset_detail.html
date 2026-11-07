@@ -45,7 +45,7 @@
 <tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
 {% for e in events %}
 <tr><td>{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description }}</td>
-<td>{{ e.action_taken }}</td><td>{{ e.technician }}</td><td class="right">{{ e.cost|money }}</td></tr>
+<td>{{ e.action_taken }}</td><td>{{ e.technician }}</td><td class="right">{{ e.cost_usd|money }}</td></tr>
 {% else %}
 <tr><td colspan="6" class="muted">No maintenance events recorded.</td></tr>
 {% endfor %}

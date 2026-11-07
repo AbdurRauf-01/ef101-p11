@@ -193,9 +193,29 @@ check("Fault History moved off dashboard", "GET /dashboard", "no Fault History h
       "<h2>Fault History" not in body)
 for url, label in [("/about/credits", "Credits"), ("/about/privacy", "Privacy Policy"), ("/about/schema", "Project Schema")]:
     check(f"About: {label}", f"GET {url}", "HTTP 200", client.get(url).status_code == 200)
-dl = client.get("/about/schema.sql")
-check("Schema download", "GET /about/schema.sql", "attachment containing the SQL",
-      "attachment" in dl.headers.get("Content-Disposition", "") and b"CREATE TABLE assets" in dl.data)
+svg_dl = client.get("/about/schema.svg?download=1")
+check("Schema SVG download", "GET /about/schema.svg?download=1", "attachment containing the diagram",
+      "attachment" in svg_dl.headers.get("Content-Disposition", "") and b"<svg" in svg_dl.data)
+svg_view = client.get("/about/schema.svg")
+check("Schema SVG shown on page", "GET /about/schema.svg", "inline SVG, not a download",
+      svg_view.status_code == 200 and b"<svg" in svg_view.data and "attachment" not in svg_view.headers.get("Content-Disposition", ""))
+check("Project Schema page embeds the diagram", "GET /about/schema", "img tag pointing at the SVG",
+      'src="/about/schema.svg"' in client.get("/about/schema").get_data(as_text=True))
+contact = client.get("/about/contact").get_data(as_text=True)
+check("Contact page", "GET /about/contact", "email and repository link present",
+      "0h0kgsuss@mozmail.com" in contact and "ef101-fall2026-p11" in contact)
+gh = client.get("/github")
+check("GitHub redirect", "GET /github", "302 to the repository",
+      gh.status_code == 302 and gh.headers.get("Location") == "https://github.com/AbdurRauf-01/ef101-fall2026-p11")
+credits = client.get("/about/credits").get_data(as_text=True)
+check("Credits content", "GET /about/credits", "all four people listed",
+      all(n in credits for n in ["Dr. Fezan Rafique", "Irteza Raza", "Abdur Rauf", "Hassan Majid"]))
+privacy = client.get("/about/privacy").get_data(as_text=True)
+check("Privacy Policy content", "GET /about/privacy", "effective date and offline statement",
+      "October 30, 2026" in privacy and "zero outbound internet requests" in privacy)
+exp = client.get("/export/maintenance.csv")
+check("Maintenance CSV uses cost_usd", "GET /export/maintenance.csv", "header has cost_usd, no plain cost",
+      exp.data.split(b"\n")[0].decode().rstrip("\r").endswith("cost_usd"))
 check("Costs shown in dollars", "GET /dashboard", "amounts start with $", "$" in body)
 check("Sidebar navigation", "GET /dashboard", "Maintenance and About links present",
       'href="/maintenance"' in body and 'href="/about/schema"' in body)

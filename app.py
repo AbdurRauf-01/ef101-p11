@@ -16,6 +16,7 @@ from db import BASE, DB_PATH
 from queries import CURRENT_ERROR_STATUSES, FIELDS, WARRANTY_SOON_DAYS
 
 app = Flask(__name__)
+GITHUB_URL = "https://github.com/AbdurRauf-01/ef101-fall2026-p11"
 app.secret_key = "ef101-demo-key"  # demo only; no real secrets in this project
 
 
@@ -139,7 +140,7 @@ def asset_detail(asset_id):
         return render_template("message.html", title="Asset not found",
                                text=f"No asset with ID '{asset_id}'."), 404
     events = queries.get_events(asset_id)
-    total_cost = sum(e["cost"] for e in events)
+    total_cost = sum(e["cost_usd"] for e in events)
     return render_template("asset_detail.html", a=a, events=events, total_cost=total_cost,
                            warranty=warranty_status(a["warranty_expiry"]), today=today())
 
@@ -234,7 +235,7 @@ def dashboard():
 def maintenance():
     events = queries.fault_history()
     return render_template("maintenance.html", events=events,
-                           total_cost=sum(e["cost"] for e in events))
+                           total_cost=sum(e["cost_usd"] for e in events))
 
 
 @app.route("/about/credits")
@@ -247,15 +248,25 @@ def about_privacy():
     return render_template("about_privacy.html")
 
 
+@app.route("/about/contact")
+def about_contact():
+    return render_template("about_contact.html")
+
+
 @app.route("/about/schema")
 def about_schema():
-    return render_template("about_schema.html",
-                           schema_text=(BASE / "schema.sql").read_text(encoding="utf-8"))
+    return render_template("about_schema.html")
 
 
-@app.route("/about/schema.sql")
-def schema_download():
-    return send_from_directory(str(BASE), "schema.sql", as_attachment=True)
+@app.route("/about/schema.svg")
+def schema_image():
+    download = request.args.get("download") == "1"
+    return send_from_directory(str(BASE / "docs"), "project-schema.svg", as_attachment=download)
+
+
+@app.route("/github")
+def github():
+    return redirect(GITHUB_URL)
 
 
 # ---- Exports -------------------------------------------------------------------
@@ -283,7 +294,7 @@ def export_maintenance():
     rows = queries.all_events()
     return csv_response(rows[0].keys() if rows else
                         ["id", "asset_id", "event_date", "fault_category", "fault_description",
-                         "action_taken", "technician", "cost"],
+                         "action_taken", "technician", "cost_usd"],
                         rows, "maintenance.csv")
 
 

@@ -10,7 +10,7 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 pip install flask
 python seed.py        # optional: wipes and recreates inventory.db with demo data
 python app.py         # open http://127.0.0.1:5000
-python test_app.py    # runs 52 checks on a temporary database, prints a results table
+python test_app.py    # runs 59 checks on a temporary database, prints a results table
 ```
 No Internet is needed: the app uses no external libraries (plain CSS in `static/style.css`; dashboard charts are CSS bars).
 
@@ -31,7 +31,7 @@ No Internet is needed: the app uses no external libraries (plain CSS in `static/
 - **Warranty label**: `WARRANTY_SOON_DAYS` (30) at the top of `queries.py` sets the Expiring soon window.
 - **Warranty status** is computed from `warranty_expiry` (Active / Expiring soon / Expired), never stored.
 - **Retire** sets `active = 0`; the row and its history are kept. Reactivate reverses it.
-- **Validation**: required fields, RAM/storage positive integers, valid IP, valid dates, purchase date not in the future, warranty not before purchase, duplicate asset ID rejected, event cost >= 0.
+- **Validation**: required fields, RAM/storage positive integers, valid IP, valid dates, purchase date not in the future, warranty not before purchase, duplicate asset ID rejected, event cost_usd >= 0.
 - All SQL uses `?` placeholders (no string-built values), so search input cannot inject SQL.
 
 ## Tool and AI disclosure (edit before submitting)

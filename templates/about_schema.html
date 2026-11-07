@@ -3,8 +3,10 @@
 {% block content %}
 <div class="row" style="justify-content:space-between">
   <h1>Project Schema</h1>
-  <a class="btn" href="{{ url_for('schema_download') }}">Download schema.sql</a>
+  <a class="btn" href="{{ url_for('schema_image', download=1) }}">Download project-schema.svg</a>
 </div>
-<p class="muted">Database tables used by this project (schema.sql). Running that file wipes and recreates both tables.</p>
-<div class="card"><pre class="code">{{ schema_text }}</pre></div>
+<p class="muted">Architecture and database diagram for this project (docs/project-schema.svg).</p>
+<div class="card scroll">
+  <img src="{{ url_for('schema_image') }}" alt="Project schema diagram" style="display:block;width:100%;height:auto">
+</div>
 {% endblock %}

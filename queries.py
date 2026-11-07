@@ -19,7 +19,7 @@ FIELDS = ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "ram_gb",
           "purchase_date", "warranty_expiry", "status", "status_reason"]
 
 EVENT_FIELDS = ["id", "asset_id", "event_date", "fault_category", "fault_description",
-                "action_taken", "technician", "cost"]
+                "action_taken", "technician", "cost_usd"]
 
 
 def attention_sql():
@@ -106,7 +106,7 @@ def add_event(asset_id, f, cost, set_status=None, status_reason=None):
     """Save one maintenance event; optionally change the asset's status and current error in the same commit."""
     db = get_db()
     db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
-               "action_taken,technician,cost) VALUES (?,?,?,?,?,?,?)",
+               "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
                (asset_id, f["event_date"], f["fault_category"], f["fault_description"],
                 f["action_taken"], f["technician"], cost))
     if set_status:
@@ -142,7 +142,7 @@ def dashboard_data():
         "attention": one(f"SELECT COUNT(*) FROM assets a WHERE {attention_sql()}"),
         "retired": one("SELECT COUNT(*) FROM assets WHERE active=0"),
         "events": one("SELECT COUNT(*) FROM maintenance"),
-        "total_cost": one("SELECT COALESCE(SUM(cost),0) FROM maintenance"),
+        "total_cost": one("SELECT COALESCE(SUM(cost_usd),0) FROM maintenance"),
     }
 
     def dist(col):
@@ -162,7 +162,7 @@ def dashboard_data():
     mx = max([r["n"] for r in cat_rows] or [1])
     fault_cats = [(r["label"], r["n"], round(r["n"] * 100 / mx)) for r in cat_rows]
     top_assets = db.execute(
-        "SELECT m.asset_id, a.model, COUNT(*) AS n, SUM(m.cost) AS cost FROM maintenance m "
+        "SELECT m.asset_id, a.model, COUNT(*) AS n, SUM(m.cost_usd) AS cost FROM maintenance m "
         "JOIN assets a ON a.asset_id=m.asset_id GROUP BY m.asset_id ORDER BY n DESC, cost DESC LIMIT 5"
     ).fetchall()
     attention = db.execute(

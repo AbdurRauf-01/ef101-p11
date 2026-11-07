@@ -34,7 +34,7 @@ CREATE TABLE maintenance (
     fault_description TEXT NOT NULL,
     action_taken     TEXT NOT NULL,
     technician       TEXT NOT NULL,
-    cost             REAL NOT NULL DEFAULT 0 CHECK (cost >= 0)
+    cost_usd         REAL NOT NULL DEFAULT 0 CHECK (cost_usd >= 0)   -- US dollars
 );
 
 CREATE INDEX idx_maint_asset ON maintenance(asset_id);

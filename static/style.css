@@ -83,3 +83,4 @@ pre.code{margin:0;padding:14px;background:var(--input);border:1px solid var(--li
   .sidebar{position:static;height:auto}
   .resizer{display:none}
 }
+.card h3{font-size:.95rem;margin:16px 0 6px}

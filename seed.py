@@ -118,7 +118,7 @@ def main():
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     conn.executemany(
         "INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
-        "action_taken,technician,cost) VALUES (?,?,?,?,?,?,?)", events)
+        "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)", events)
     conn.commit()
     conn.close()
     print(f"Seeded {len(assets)} demo assets and {len(events)} maintenance events.")

@@ -16,7 +16,7 @@ Total cost {{ total_cost|money }}.</p>
 <td>{{ e.model }}</td><td>{{ e.location }}</td>
 <td><span class="badge b-{{ e.status|replace(' ', '-') }}">{{ e.status }}</span></td>
 <td>{{ e.fault_category }}</td><td>{{ e.fault_description }}</td><td>{{ e.action_taken }}</td>
-<td>{{ e.technician }}</td><td class="right nw">{{ e.cost|money }}</td></tr>
+<td>{{ e.technician }}</td><td class="right nw">{{ e.cost_usd|money }}</td></tr>
 {% else %}
 <tr><td colspan="10" class="muted">No fault events recorded.</td></tr>
 {% endfor %}

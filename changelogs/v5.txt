@@ -1,0 +1,8 @@
+What changed:
+
+- Credits, Privacy Policy, and Contact are filled
+- Cost is now cost_usd. The database column is renamed, so the CSV header is cost_usd and the values are unchanged. The UI shows $. The form field is still named cost, so the entry form doesn’t change.
+- Project Schema now shows docs/project-schema.svg on the page, with a “Download project-schema.svg” button. schema.sql is no longer shown on the page.
+- Diagram and schema files were updated.
+- GitHub is in the About menu. It goes through a /github redirect and opens in a new tab.
+- Contact is in the About menu.
