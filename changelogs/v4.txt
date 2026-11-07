@@ -1,0 +1,8 @@
+What changed:
+
+- Light and dark theme. A “Switch theme” button sits at the bottom of the sidebar. The app opens in your system’s theme the first time, and then remembers your choice in the browser.
+- Fault history removed from the Dashboard. The section and its “latest 20 of N” text are gone.
+- Explanatory paragraph removed from the Dashboard.
+- Resizable sidebar. Drag the thin line between the sidebar and the content. The width is limited to 180–420 px and is remembered. Arrow keys also resize it, and Home resets it to the default.
+- Dollar amounts. Costs now show as $1,324.00 on the dashboard, Fault History, asset detail, and the log-event form label. The CSV exports still contain plain numbers.
+- Sidebar navigation added.

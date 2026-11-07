@@ -9,14 +9,20 @@ import sqlite3
 from datetime import date, datetime, timedelta
 
 from flask import (Flask, Response, flash, redirect, render_template, request,
-                   url_for)
+                   send_from_directory, url_for)
 
 import queries
-from db import DB_PATH
+from db import BASE, DB_PATH
 from queries import CURRENT_ERROR_STATUSES, FIELDS, WARRANTY_SOON_DAYS
 
 app = Flask(__name__)
 app.secret_key = "ef101-demo-key"  # demo only; no real secrets in this project
+
+
+@app.template_filter("money")
+def money(value):
+    """Format a cost in US dollars, e.g. 1234.5 -> $1,234.50."""
+    return f"${float(value or 0):,.2f}"
 
 # The "needs attention" rule, CURRENT_ERROR_STATUSES and FIELDS live in queries.py,
 # together with all the SQL.
@@ -220,7 +226,36 @@ def dashboard():
     d = queries.dashboard_data()
     return render_template("dashboard.html", stats=d["stats"], charts=d["charts"],
                            fault_cats=d["fault_cats"], top_assets=d["top_assets"],
-                           attention=d["attention"], history=d["history"])
+                           attention=d["attention"])
+
+
+# ---- Maintenance and About pages -------------------------------------------------
+@app.route("/maintenance")
+def maintenance():
+    events = queries.fault_history()
+    return render_template("maintenance.html", events=events,
+                           total_cost=sum(e["cost"] for e in events))
+
+
+@app.route("/about/credits")
+def about_credits():
+    return render_template("about_credits.html")
+
+
+@app.route("/about/privacy")
+def about_privacy():
+    return render_template("about_privacy.html")
+
+
+@app.route("/about/schema")
+def about_schema():
+    return render_template("about_schema.html",
+                           schema_text=(BASE / "schema.sql").read_text(encoding="utf-8"))
+
+
+@app.route("/about/schema.sql")
+def schema_download():
+    return send_from_directory(str(BASE), "schema.sql", as_attachment=True)
 
 
 # ---- Exports -------------------------------------------------------------------

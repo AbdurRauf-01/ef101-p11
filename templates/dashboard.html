@@ -10,11 +10,8 @@
   <div class="card stat"><div class="n">{{ stats.out_of_warranty }}</div><div class="l">Out of warranty</div></div>
   <div class="card stat"><div class="n">{{ stats.events }}</div><div class="l">Fault events logged</div></div>
   <div class="card stat"><div class="n">{{ stats.retired }}</div><div class="l">Retired (not counted above)</div></div>
-  <div class="card stat"><div class="n">{{ '%.0f'|format(stats.total_cost) }}</div><div class="l">Total maintenance cost</div></div>
+  <div class="card stat"><div class="n small">{{ stats.total_cost|money }}</div><div class="l">Total maintenance cost</div></div>
 </div>
-
-<p class="muted">"Needing attention" lists only assets whose current status is Faulty or Under Repair, with the error
-they are waiting on. Past fault events, whatever the status, are in Fault history below.</p>
 
 <h2>Hardware distribution</h2>
 <div class="grid g2">
@@ -41,7 +38,7 @@ they are waiting on. Past fault events, whatever the status, are in Fault histor
 <table><tr><th>Asset</th><th>Model</th><th>Events</th><th class="right">Cost</th></tr>
 {% for r in top_assets %}
 <tr><td><a href="{{ url_for('asset_detail', asset_id=r.asset_id) }}">{{ r.asset_id }}</a></td>
-<td>{{ r.model }}</td><td>{{ r.n }}</td><td class="right">{{ '%.0f'|format(r.cost) }}</td></tr>
+<td>{{ r.model }}</td><td>{{ r.n }}</td><td class="right">{{ r.cost|money }}</td></tr>
 {% endfor %}</table>
 {% if top_assets %}<p><b>Most failing asset:</b> {{ top_assets[0].asset_id }} ({{ top_assets[0].n }} events)</p>{% endif %}</div>
 </div>
@@ -51,21 +48,9 @@ they are waiting on. Past fault events, whatever the status, are in Fault histor
 {% for r in attention %}
 <tr><td><a href="{{ url_for('asset_detail', asset_id=r.asset_id) }}">{{ r.asset_id }}</a></td>
 <td>{{ r.model }}</td><td>{{ r.location }}</td>
-<td><span class="badge b-{{ r.status }}">{{ r.status }}</span></td>
+<td><span class="badge b-{{ r.status|replace(' ', '-') }}">{{ r.status }}</span></td>
 <td>{{ r.status_reason or 'Unknown' }}</td></tr>
 {% else %}
 <tr><td colspan="5" class="muted">No assets are currently faulty or under repair.</td></tr>
-{% endfor %}</table></div>
-
-<div class="card scroll"><h2>Fault history (all assets)</h2>
-<p class="muted">Latest {{ history|length }} of {{ stats.events }} fault events, whatever the asset's current status.
-<a href="{{ url_for('export_maintenance') }}">Export all events</a></p>
-<table><tr><th>Date</th><th>Asset</th><th>Status now</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
-{% for e in history %}
-<tr><td>{{ e.event_date }}</td><td><a href="{{ url_for('asset_detail', asset_id=e.asset_id) }}">{{ e.asset_id }}</a></td>
-<td>{{ e.status }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description }}</td>
-<td>{{ e.action_taken }}</td><td>{{ e.technician }}</td><td class="right">{{ '%.2f'|format(e.cost) }}</td></tr>
-{% else %}
-<tr><td colspan="8" class="muted">No fault events recorded.</td></tr>
 {% endfor %}</table></div>
 {% endblock %}

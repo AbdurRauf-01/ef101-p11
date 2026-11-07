@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Project Schema{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>Project Schema</h1>
+  <a class="btn" href="{{ url_for('schema_download') }}">Download schema.sql</a>
+</div>
+<p class="muted">Database tables used by this project (schema.sql). Running that file wipes and recreates both tables.</p>
+<div class="card"><pre class="code">{{ schema_text }}</pre></div>
+{% endblock %}

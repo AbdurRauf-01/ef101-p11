@@ -4,22 +4,98 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Hardware Inventory{% endblock %} - EF101-P11</title>
+<script>
+  // Runs before the page paints, so the saved theme and sidebar width apply with no flash.
+  (function () {
+    var root = document.documentElement;
+    var theme = localStorage.getItem('inv-theme');
+    if (!theme) theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    root.setAttribute('data-theme', theme);
+    var w = parseInt(localStorage.getItem('inv-sidebar'), 10);
+    if (w >= 180 && w <= 420) root.style.setProperty('--sidebar-w', w + 'px');
+  })();
+</script>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<nav>
-  <span class="brand">Hardware Inventory</span>
-  <a href="{{ url_for('dashboard') }}">Dashboard</a>
-  <a href="{{ url_for('assets') }}">Assets</a>
-  <a href="{{ url_for('asset_new') }}">Add asset</a>
-  <a href="{{ url_for('export_assets') }}">Export assets</a>
-  <a href="{{ url_for('export_maintenance') }}">Export maintenance</a>
-</nav>
-<main>
-  {% with msgs = get_flashed_messages(with_categories=true) %}
-    {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
-  {% endwith %}
-  {% block content %}{% endblock %}
-</main>
+{% set ep = request.endpoint or '' %}
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">Hardware Inventory</div>
+    <nav aria-label="Main">
+      <a class="top {{ 'on' if ep == 'dashboard' }}" href="{{ url_for('dashboard') }}">Dashboard</a>
+
+      <div class="group">Assets</div>
+      <a class="{{ 'on' if ep in ('assets', 'asset_detail', 'asset_edit') }}" href="{{ url_for('assets') }}">Assets List</a>
+      <a class="{{ 'on' if ep == 'asset_new' }}" href="{{ url_for('asset_new') }}">Add Asset</a>
+      <a href="{{ url_for('export_assets') }}">Export Assets</a>
+
+      <div class="group">Maintenance</div>
+      <a class="{{ 'on' if ep == 'maintenance' }}" href="{{ url_for('maintenance') }}">Fault History</a>
+      <a href="{{ url_for('export_maintenance') }}">Export Maintenance</a>
+
+      <div class="group">About</div>
+      <a class="{{ 'on' if ep == 'about_credits' }}" href="{{ url_for('about_credits') }}">Credits</a>
+      <a class="{{ 'on' if ep == 'about_privacy' }}" href="{{ url_for('about_privacy') }}">Privacy Policy</a>
+      <a class="{{ 'on' if ep == 'about_schema' }}" href="{{ url_for('about_schema') }}">Project Schema</a>
+    </nav>
+    <button class="btn sec theme" id="theme-toggle" type="button">Switch theme</button>
+  </aside>
+  <div class="resizer" id="resizer" tabindex="0" role="separator" aria-orientation="vertical"
+       aria-label="Resize sidebar" title="Drag to resize (arrow keys also work, Home resets)"></div>
+  <div class="content">
+    <main>
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+
+  // Theme toggle (choice is remembered in this browser)
+  var btn = document.getElementById('theme-toggle');
+  function paintButton() {
+    btn.textContent = root.getAttribute('data-theme') === 'dark' ? 'Switch to light' : 'Switch to dark';
+  }
+  btn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('inv-theme', next);
+    paintButton();
+  });
+  paintButton();
+
+  // Sidebar resizer: drag with mouse/touch, or use arrow keys. Width is remembered.
+  var MIN = 180, MAX = 420, DEFAULT = 240;
+  var handle = document.getElementById('resizer');
+  function currentWidth() {
+    return parseInt(getComputedStyle(root).getPropertyValue('--sidebar-w'), 10) || DEFAULT;
+  }
+  function setWidth(w) {
+    w = Math.max(MIN, Math.min(MAX, Math.round(w)));
+    root.style.setProperty('--sidebar-w', w + 'px');
+    localStorage.setItem('inv-sidebar', w);
+  }
+  var dragging = false;
+  handle.addEventListener('pointerdown', function (e) {
+    dragging = true;
+    handle.setPointerCapture(e.pointerId);
+    document.body.classList.add('resizing');
+  });
+  handle.addEventListener('pointermove', function (e) { if (dragging) setWidth(e.clientX); });
+  function stopDrag() { dragging = false; document.body.classList.remove('resizing'); }
+  handle.addEventListener('pointerup', stopDrag);
+  handle.addEventListener('pointercancel', stopDrag);
+  handle.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft')  { setWidth(currentWidth() - 10); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { setWidth(currentWidth() + 10); e.preventDefault(); }
+    if (e.key === 'Home')       { setWidth(DEFAULT); e.preventDefault(); }
+  });
+})();
+</script>
 </body>
 </html>

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Fault History{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between">
+  <h1>Fault History</h1>
+  <a class="btn sec" href="{{ url_for('export_maintenance') }}">Export maintenance CSV</a>
+</div>
+<p class="muted">{{ events|length }} fault events across all assets, whatever each asset's current status.
+Total cost {{ total_cost|money }}.</p>
+<div class="card scroll">
+<table>
+<tr><th>Date</th><th>Asset</th><th>Model</th><th>Location</th><th>Status now</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
+{% for e in events %}
+<tr><td class="nw">{{ e.event_date }}</td>
+<td class="nw"><a href="{{ url_for('asset_detail', asset_id=e.asset_id) }}">{{ e.asset_id }}</a></td>
+<td>{{ e.model }}</td><td>{{ e.location }}</td>
+<td><span class="badge b-{{ e.status|replace(' ', '-') }}">{{ e.status }}</span></td>
+<td>{{ e.fault_category }}</td><td>{{ e.fault_description }}</td><td>{{ e.action_taken }}</td>
+<td>{{ e.technician }}</td><td class="right nw">{{ e.cost|money }}</td></tr>
+{% else %}
+<tr><td colspan="10" class="muted">No fault events recorded.</td></tr>
+{% endfor %}
+</table></div>
+{% endblock %}

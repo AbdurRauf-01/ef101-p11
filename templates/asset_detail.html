@@ -31,12 +31,12 @@
 </dl></div>
 <div class="card"><h2>Status &amp; warranty</h2>
 <dl>
-  <dt>Operational status</dt><dd><span class="badge b-{{ a.status }}">{{ a.status }}</span></dd>
+  <dt>Operational status</dt><dd><span class="badge b-{{ a.status|replace(' ', '-') }}">{{ a.status }}</span></dd>
   <dt>Current error</dt><dd>{% if a.status == 'Operational' %}N/A{% else %}{{ a.status_reason or 'Unknown' }}{% endif %}</dd>
   <dt>Purchase date</dt><dd>{{ a.purchase_date }}</dd>
-  <dt>Warranty expiry</dt><dd>{{ a.warranty_expiry }} <span class="badge b-{{ warranty }}">{{ warranty }}</span></dd>
+  <dt>Warranty expiry</dt><dd>{{ a.warranty_expiry }} <span class="badge b-{{ warranty|replace(' ', '-') }}">{{ warranty }}</span></dd>
   <dt>Maintenance events</dt><dd>{{ events|length }}</dd>
-  <dt>Total repair cost</dt><dd>{{ '%.2f'|format(total_cost) }}</dd>
+  <dt>Total repair cost</dt><dd>{{ total_cost|money }}</dd>
 </dl></div>
 </div>
 
@@ -45,7 +45,7 @@
 <tr><th>Date</th><th>Category</th><th>Fault</th><th>Action taken</th><th>Technician</th><th class="right">Cost</th></tr>
 {% for e in events %}
 <tr><td>{{ e.event_date }}</td><td>{{ e.fault_category }}</td><td>{{ e.fault_description }}</td>
-<td>{{ e.action_taken }}</td><td>{{ e.technician }}</td><td class="right">{{ '%.2f'|format(e.cost) }}</td></tr>
+<td>{{ e.action_taken }}</td><td>{{ e.technician }}</td><td class="right">{{ e.cost|money }}</td></tr>
 {% else %}
 <tr><td colspan="6" class="muted">No maintenance events recorded.</td></tr>
 {% endfor %}
@@ -61,7 +61,7 @@
   <div><label>Fault description *</label><input name="fault_description"></div>
   <div><label>Action taken *</label><input name="action_taken"></div>
   <div><label>Technician *</label><input name="technician"></div>
-  <div><label>Cost</label><input name="cost" value="0"></div>
+  <div><label>Cost ($)</label><input name="cost" value="0"></div>
   <div><label>Update asset status to</label><select name="set_status"><option value="">(no change)</option>
     <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
   <div><label>Current error (required for Faulty / Under Repair)</label><input name="status_reason" placeholder="Describe the fault, or Unknown"></div>

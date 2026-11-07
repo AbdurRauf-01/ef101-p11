@@ -170,8 +170,6 @@ faulty_or_repair = count("SELECT COUNT(*) FROM assets WHERE active=1 AND status 
 check("Attention = current errors only", "GET /dashboard", f"heading shows {faulty_or_repair}",
       f"Assets needing attention ({faulty_or_repair})" in body)
 last = db.get_db().execute("SELECT fault_description FROM maintenance ORDER BY event_date DESC, id DESC LIMIT 1").fetchone()
-check("Fault history section", "latest event on dashboard", "section shown with the newest event",
-      "Fault history" in body and last[0] in body)
 
 # 10. Exports
 a = client.get("/export/assets.csv")
@@ -186,6 +184,23 @@ check("Export maintenance CSV", "GET /export/maintenance.csv", "header + one row
 # 11. Robustness
 check("Unknown asset", "GET /assets/NOPE", "404 page, no crash", client.get("/assets/NOPE").status_code == 404)
 check("Unknown URL", "GET /xyz", "404 page", client.get("/xyz").status_code == 404)
+
+# 12. Sidebar pages, dollars, theme and resizer
+maint_page = client.get("/maintenance")
+check("Fault History page", "GET /maintenance", "HTTP 200 and newest event listed",
+      maint_page.status_code == 200 and last[0] in maint_page.get_data(as_text=True))
+check("Fault History moved off dashboard", "GET /dashboard", "no Fault History heading there",
+      "<h2>Fault History" not in body)
+for url, label in [("/about/credits", "Credits"), ("/about/privacy", "Privacy Policy"), ("/about/schema", "Project Schema")]:
+    check(f"About: {label}", f"GET {url}", "HTTP 200", client.get(url).status_code == 200)
+dl = client.get("/about/schema.sql")
+check("Schema download", "GET /about/schema.sql", "attachment containing the SQL",
+      "attachment" in dl.headers.get("Content-Disposition", "") and b"CREATE TABLE assets" in dl.data)
+check("Costs shown in dollars", "GET /dashboard", "amounts start with $", "$" in body)
+check("Sidebar navigation", "GET /dashboard", "Maintenance and About links present",
+      'href="/maintenance"' in body and 'href="/about/schema"' in body)
+check("Theme toggle and resizer", "GET /dashboard", "controls present",
+      'id="theme-toggle"' in body and 'id="resizer"' in body)
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

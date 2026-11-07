@@ -119,12 +119,13 @@ def all_events():
     return get_db().execute("SELECT * FROM maintenance ORDER BY event_date DESC, id DESC").fetchall()
 
 
-def fault_history(limit=20):
-    """Latest maintenance events across ALL assets, whatever their current status."""
-    return get_db().execute(
-        "SELECT m.*, a.model, a.location, a.status FROM maintenance m "
-        "JOIN assets a ON a.asset_id=m.asset_id "
-        "ORDER BY m.event_date DESC, m.id DESC LIMIT ?", (int(limit),)).fetchall()
+def fault_history(limit=None):
+    """Maintenance events across ALL assets, newest first, whatever their current status."""
+    sql = ("SELECT m.*, a.model, a.location, a.status FROM maintenance m "
+           "JOIN assets a ON a.asset_id=m.asset_id ORDER BY m.event_date DESC, m.id DESC")
+    if limit is None:
+        return get_db().execute(sql).fetchall()
+    return get_db().execute(sql + " LIMIT ?", (int(limit),)).fetchall()
 
 
 # ---- Dashboard --------------------------------------------------------------
@@ -168,4 +169,4 @@ def dashboard_data():
         f"SELECT a.asset_id, a.model, a.location, a.status, a.status_reason "
         f"FROM assets a WHERE {attention_sql()} ORDER BY a.asset_id").fetchall()
     return {"stats": stats, "charts": charts, "fault_cats": fault_cats,
-            "top_assets": top_assets, "attention": attention, "history": fault_history(20)}
+            "top_assets": top_assets, "attention": attention}

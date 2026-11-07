@@ -43,8 +43,8 @@
   <td>{{ a.storage_type }} {{ a.storage_gb }} GB</td>
   <td>{{ a.gpu or 'Integrated' }}</td>
   <td>{{ a.location }}</td>
-  <td><span class="badge b-{{ a.status }}">{{ a.status }}</span></td>
-  <td><span class="badge b-{{ a.warranty }}">{{ a.warranty }}</span></td>
+  <td><span class="badge b-{{ a.status|replace(' ', '-') }}">{{ a.status }}</span></td>
+  <td><span class="badge b-{{ a.warranty|replace(' ', '-') }}">{{ a.warranty }}</span></td>
   <td>{{ a.fault_count }}</td>
 </tr>
 {% else %}

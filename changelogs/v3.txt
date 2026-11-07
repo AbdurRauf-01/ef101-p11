@@ -1,0 +1,6 @@
+What changed:
+
+- “Assets needing attention” is now emergencies only. It lists active assets whose status is Faulty or Under Repair. The fault-count and warranty-expiry rules are gone from this list.
+- New “Fault history” section on the dashboard. It shows the latest 20 fault events across all assets, whatever their current status, with an export link.
+- Current error field. Each asset now stores a current-error reason. Operational assets show N/A. Faulty and Under Repair assets show their reason, or Unknown if no reason is stored. The asset detail page has a “Current error” row, and the dashboard’s needs-attention table has a “Current error” column.
+- Manual status changes require a reason. This applies on both the Edit asset form and the Log event form. If you set Faulty or Under Repair and leave the reason blank, the save is rejected with a message. Type the error, or type Unknown if you don’t know it. Setting Operational clears the reason.
