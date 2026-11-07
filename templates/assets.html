@@ -43,7 +43,7 @@
   <td>{{ a.cpu }}</td>
   <td>{{ a.ram_gb }} GB {{ a.ram_type }}</td>
   <td>{{ a.storage_type }} {{ a.storage_gb }} GB</td>
-  <td>{{ a.gpu or 'Integrated' }}</td>
+  <td>{{ a.gpu or 'Integrated' }}{% if a.gpu_vram_gb %} ({{ a.gpu_vram_gb }} GB){% endif %}</td>
   <td>{{ a.location }}</td>
   <td><span class="badge b-{{ a.status|replace(' ', '-') }}">{{ a.status }}</span></td>
   <td><span class="badge b-{{ a.warranty|replace(' ', '-') }}">{{ a.warranty }}</span></td>

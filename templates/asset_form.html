@@ -5,8 +5,12 @@
 <div class="card">
 <form method="post" novalidate>
 <div class="formgrid">
-  <div><label>Asset ID *</label>
-    <input name="asset_id" value="{{ a.get('asset_id','') }}" {{ '' if new else 'readonly' }} placeholder="e.g. L1-PC-041"></div>
+  <div><label>Location *</label><select name="location"><option value="">— choose —</option>
+    {% for o in locations %}<option{{ ' selected' if a.get('location')==o }}>{{ o }}</option>{% endfor %}
+    <option value="{{ NEW_LOCATION }}"{{ ' selected' if a.get('location')==NEW_LOCATION }}>+ Add new location…</option></select>
+    <input name="new_location" value="{{ a.get('new_location','') or '' }}" placeholder="New location name, e.g. Lab 4" style="margin-top:6px"></div>
+  <div><label>Asset ID {{ '(blank = assigned automatically from the location)' if new else '(permanent)' }}</label>
+    <input name="asset_id" value="{{ a.get('asset_id','') or '' }}" {{ '' if new else 'readonly' }} placeholder="auto, e.g. L1-PC-041"></div>
   <div><label>Manufacturer *</label><input name="manufacturer" value="{{ a.get('manufacturer','') }}"></div>
   <div><label>Model *</label><input name="model" value="{{ a.get('model','') }}"></div>
   <div><label>CPU (full model) *</label><input name="cpu" value="{{ a.get('cpu','') }}" placeholder="Intel Core i5-12400"></div>
@@ -17,10 +21,10 @@
   <div><label>Storage type *</label><select name="storage_type">
     {% for o in storage_types %}<option{{ ' selected' if a.get('storage_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
   <div><label>Storage capacity (GB) *</label><input name="storage_gb" value="{{ a.get('storage_gb','') }}"></div>
-  <div><label>GPU (blank = integrated)</label><input name="gpu" value="{{ a.get('gpu','') or '' }}"></div>
+  <div><label>GPU (blank = integrated)</label><input name="gpu" value="{{ a.get('gpu','') or '' }}" placeholder="NVIDIA RTX 3060"></div>
+  <div><label>GPU VRAM (GB) — required if a GPU is listed</label><input name="gpu_vram_gb" value="{{ a.get('gpu_vram_gb','') or '' }}" placeholder="12"></div>
   <div><label>Operating system *</label><input name="os" value="{{ a.get('os','') }}"></div>
   <div><label>IP address</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="192.168.1.20"></div>
-  <div><label>Location *</label><input name="location" value="{{ a.get('location','') }}"></div>
   <div><label>Purchase date * (YYYY-MM-DD)</label><input type="date" name="purchase_date" value="{{ a.get('purchase_date','') }}"></div>
   <div><label>Warranty expiry * (YYYY-MM-DD)</label><input type="date" name="warranty_expiry" value="{{ a.get('warranty_expiry','') }}"></div>
   <div><label>Operational status</label><select name="status">

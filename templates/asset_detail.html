@@ -25,6 +25,7 @@
   <dt>RAM</dt><dd>{{ a.ram_gb }} GB {{ a.ram_type }}</dd>
   <dt>Storage</dt><dd>{{ a.storage_type }}, {{ a.storage_gb }} GB</dd>
   <dt>GPU</dt><dd>{{ a.gpu or 'Integrated only' }}</dd>
+  <dt>GPU VRAM</dt><dd>{% if a.gpu_vram_gb %}{{ a.gpu_vram_gb }} GB{% else %}N/A (integrated){% endif %}</dd>
   <dt>Operating system</dt><dd>{{ a.os }}</dd>
   <dt>IP address</dt><dd>{{ a.ip_address or '-' }}</dd>
   <dt>Location</dt><dd>{{ a.location }}</dd>

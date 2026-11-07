@@ -1,12 +1,18 @@
 -- EF101-P11 Hardware Asset Inventory: database schema (SQLite)
--- One asset has many maintenance events (1 : N via maintenance.asset_id).
--- Running this file wipes and recreates both tables.
+-- locations (1) -- (N) assets (1) -- (N) maintenance
+-- Running this file wipes and recreates all three tables.
 
 DROP TABLE IF EXISTS maintenance;
 DROP TABLE IF EXISTS assets;
+DROP TABLE IF EXISTS locations;
+
+CREATE TABLE locations (
+    name    TEXT PRIMARY KEY,                 -- shown in the drop-down, e.g. Lab 1
+    prefix  TEXT NOT NULL UNIQUE              -- start of automatic asset IDs, e.g. L1 -> L1-PC-001
+);
 
 CREATE TABLE assets (
-    asset_id        TEXT PRIMARY KEY,                 -- permanent identity, e.g. LAB1-PC-001
+    asset_id        TEXT PRIMARY KEY,                 -- permanent identity, e.g. L1-PC-001
     manufacturer    TEXT NOT NULL,
     model           TEXT NOT NULL,
     cpu             TEXT NOT NULL,                    -- full model, e.g. Intel Core i5-12400
@@ -16,9 +22,10 @@ CREATE TABLE assets (
     storage_type    TEXT NOT NULL CHECK (storage_type IN ('SSD','HDD','NVMe','Hybrid')),
     storage_gb      INTEGER NOT NULL CHECK (storage_gb > 0),
     gpu             TEXT,                             -- NULL / empty = integrated only
+    gpu_vram_gb     INTEGER CHECK (gpu_vram_gb IS NULL OR gpu_vram_gb > 0),  -- GPU memory; NULL = no discrete GPU
     os              TEXT NOT NULL,
     ip_address      TEXT,                             -- changeable network address (NOT identity)
-    location        TEXT NOT NULL,
+    location        TEXT NOT NULL REFERENCES locations(name),
     purchase_date   TEXT NOT NULL,                    -- ISO date YYYY-MM-DD
     warranty_expiry TEXT NOT NULL,                    -- warranty status is COMPUTED from this
     status          TEXT NOT NULL DEFAULT 'Operational'

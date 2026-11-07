@@ -23,6 +23,7 @@ app.secret_key = "ef101-demo-key"  # demo only; no real secrets in this project
 # Allowed values below must match the CHECK constraints in schema.sql.
 STATUSES = ["Operational", "Faulty", "Under Repair"]
 STORAGE_TYPES = ["SSD", "NVMe", "HDD", "Hybrid"]
+NEW_LOCATION = "__new__"    # drop-down value meaning "+ Add new location"
 NEED_CATEGORY = ("Choose the current error category for Faulty or Under Repair "
                  "(use N/A, Unknown or Other if needed).")
 NEED_DETAIL = ("Describe the current error for Faulty or Under Repair. "
@@ -33,7 +34,8 @@ NEED_DETAIL = ("Describe the current error for Faulty or Under Repair. "
 def option_lists():
     """Drop-down choices, available to every template."""
     return dict(storage_types=STORAGE_TYPES, statuses=STATUSES, ram_types=RAM_TYPES,
-                fault_categories=FAULT_CATEGORIES, error_categories=CURRENT_ERROR_CATEGORIES)
+                fault_categories=FAULT_CATEGORIES, error_categories=CURRENT_ERROR_CATEGORIES,
+                locations=queries.location_names(), NEW_LOCATION=NEW_LOCATION)
 
 
 @app.template_filter("money")
@@ -73,13 +75,35 @@ def current_error_problems(category, detail):
     return problems
 
 
+def resolve_location(form):
+    """Returns (place name, is_new). Choosing '+ Add new location' uses the typed name, unless a
+    place with the same name (any upper/lower case) already exists, in which case that one is used."""
+    chosen = (form.get("location") or "").strip()
+    if chosen != NEW_LOCATION:
+        return chosen, False
+    typed = (form.get("new_location") or "").strip()
+    existing = queries.find_location(typed) if typed else None
+    if existing:
+        return existing, False
+    return typed, True
+
+
+def existing_or_new_prefix(name, is_new):
+    """Short code used for the asset ID of this place."""
+    if is_new:
+        return queries.suggest_prefix(name, queries.all_prefixes())
+    return queries.location_prefix(name)
+
+
 def validate_asset(f, is_new):
     """Server-side validation. Returns (clean_dict, errors_list)."""
     errors = []
     c = {k: (f.get(k) or "").strip() for k in FIELDS}
-    for k in ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "os", "location"]:
+    for k in ["manufacturer", "model", "cpu", "cpu_family", "os", "location"]:
         if not c[k]:
             errors.append(f"{k.replace('_', ' ').title()} is required.")
+    if not c["asset_id"]:
+        errors.append("Choose a location so the asset ID can be assigned automatically, or type an ID.")
     for k in ["ram_gb", "storage_gb"]:
         try:
             c[k] = int(c[k])
@@ -87,6 +111,15 @@ def validate_asset(f, is_new):
                 raise ValueError
         except ValueError:
             errors.append(f"{k.replace('_', ' ').upper()} must be a positive whole number.")
+    if c["gpu"]:
+        try:
+            c["gpu_vram_gb"] = int(c["gpu_vram_gb"])
+            if c["gpu_vram_gb"] <= 0:
+                raise ValueError
+        except ValueError:
+            errors.append("GPU VRAM (GB) must be a positive whole number when a GPU is listed.")
+    else:
+        c["gpu_vram_gb"] = None          # integrated graphics: no VRAM value
     if c["ram_type"] not in RAM_TYPES:
         errors.append("Choose a RAM type (DDR1 to DDR5).")
     if c["storage_type"] not in STORAGE_TYPES:
@@ -111,9 +144,8 @@ def validate_asset(f, is_new):
         errors.append("Warranty expiry must be a valid date (YYYY-MM-DD).")
     if p and w and w < p:
         errors.append("Warranty expiry cannot be before the purchase date.")
-    if is_new and c["asset_id"]:
-        if queries.asset_exists(c["asset_id"]):
-            errors.append(f"Asset ID '{c['asset_id']}' already exists.")
+    if is_new and c["asset_id"] and queries.asset_exists(c["asset_id"]):
+        errors.append(f"Asset ID '{c['asset_id']}' already exists.")
     return c, errors
 
 
@@ -133,16 +165,29 @@ def assets():
 @app.route("/assets/new", methods=["GET", "POST"])
 def asset_new():
     if request.method == "POST":
-        c, errors = validate_asset(request.form, is_new=True)
+        form = dict(request.form)
+        name, is_new_loc = resolve_location(request.form)
+        form["location"] = name
+        errors = []
+        if is_new_loc and not name:
+            errors.append("Type the name of the new location (for example Lab 4).")
+        if name and not (form.get("asset_id") or "").strip():
+            prefix = existing_or_new_prefix(name, is_new_loc)
+            if prefix:
+                form["asset_id"] = queries.next_asset_id(prefix)   # automatic ID
+        c, more = validate_asset(form, is_new=True)
+        errors += more
         if errors:
             for e in errors:
                 flash(e, "danger")
-            return render_template("asset_form.html", a=request.form, new=True)
+            return render_template("asset_form.html", a=form, new=True)
         try:
+            if is_new_loc:
+                queries.add_location(name, existing_or_new_prefix(name, True))
             queries.insert_asset(c)
         except sqlite3.IntegrityError as e:
             flash(f"Database rejected the record: {e}", "danger")
-            return render_template("asset_form.html", a=request.form, new=True)
+            return render_template("asset_form.html", a=form, new=True)
         flash(f"Asset {c['asset_id']} added.", "success")
         return redirect(url_for("asset_detail", asset_id=c["asset_id"]))
     return render_template("asset_form.html", a={}, new=True)
@@ -167,12 +212,20 @@ def asset_edit(asset_id):
         return render_template("message.html", title="Asset not found", text=asset_id), 404
     if request.method == "POST":
         form = dict(request.form)
-        form["asset_id"] = asset_id  # primary key is never changed
-        c, errors = validate_asset(form, is_new=False)
+        form["asset_id"] = asset_id                       # primary key is never changed
+        name, is_new_loc = resolve_location(request.form)
+        form["location"] = name
+        errors = []
+        if is_new_loc and not name:
+            errors.append("Type the name of the new location (for example Lab 4).")
+        c, more = validate_asset(form, is_new=False)
+        errors += more
         if errors:
             for e in errors:
                 flash(e, "danger")
             return render_template("asset_form.html", a=form, new=False)
+        if is_new_loc:
+            queries.add_location(name, existing_or_new_prefix(name, True))
         queries.update_asset(asset_id, c)
         flash("Asset updated.", "success")
         return redirect(url_for("asset_detail", asset_id=asset_id))

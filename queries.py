@@ -2,6 +2,8 @@
 app.py (backend) calls these functions and never writes SQL itself.
 All values are passed as ? parameters (never pasted into the SQL text), so input cannot inject SQL.
 """
+import re
+
 from db import get_db
 
 # ---- Drop-down lists. app.py validates against these.
@@ -19,7 +21,7 @@ WARRANTY_SOON_DAYS = 30
 
 # Columns of the assets table that a user can enter (active is handled separately)
 FIELDS = ["asset_id", "manufacturer", "model", "cpu", "cpu_family", "ram_gb", "ram_type",
-          "storage_type", "storage_gb", "gpu", "os", "ip_address", "location",
+          "storage_type", "storage_gb", "gpu", "gpu_vram_gb", "os", "ip_address", "location",
           "purchase_date", "warranty_expiry", "status", "status_category", "status_detail"]
 
 EVENT_FIELDS = ["id", "asset_id", "event_date", "fault_category", "fault_description",
@@ -29,6 +31,65 @@ EVENT_FIELDS = ["id", "asset_id", "event_date", "fault_category", "fault_descrip
 def attention_sql():
     """SQL fragment (for table alias a) implementing the 'needs attention' rule: current errors only."""
     return "(a.active=1 AND a.status IN ('Faulty','Under Repair'))"
+
+
+# ---- Locations ----------------------------------------------------------------
+def location_names():
+    return [r[0] for r in get_db().execute("SELECT name FROM locations ORDER BY name")]
+
+
+def find_location(name):
+    """The existing location with this name (upper/lower case ignored), or None."""
+    r = get_db().execute("SELECT name FROM locations WHERE LOWER(name)=LOWER(?)", (name,)).fetchone()
+    return r[0] if r else None
+
+
+def location_prefix(name):
+    r = get_db().execute("SELECT prefix FROM locations WHERE name=?", (name,)).fetchone()
+    return r[0] if r else None
+
+
+def all_prefixes():
+    return {r[0] for r in get_db().execute("SELECT prefix FROM locations")}
+
+
+def suggest_prefix(name, taken):
+    """Short code for asset IDs made from a place name: 'Lab 4' -> 'L4', 'Server Room' -> 'SR'.
+    A number is added if the code is already used."""
+    tokens = re.findall(r"[A-Za-z0-9]+", name)
+    base = "".join(t[0] for t in tokens).upper() if tokens else ""
+    if len(base) < 2 and tokens:
+        base = tokens[0][:3].upper()
+    base = base or "LOC"
+    prefix, n = base, 2
+    while prefix in taken:
+        prefix, n = f"{base}{n}", n + 1
+    return prefix
+
+
+def add_location(name, prefix):
+    """Writes are committed, or rolled back and closed on error, so a failed save never leaves
+    a transaction open (an open one would lock the database for the next request)."""
+    db = get_db()
+    try:
+        db.execute("INSERT INTO locations (name,prefix) VALUES (?,?)", (name, prefix))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def next_asset_id(prefix):
+    """Next free ID for a prefix, e.g. LIB-PC-038. Retired IDs are never reused."""
+    stem = f"{prefix}-PC-"
+    nums = []
+    for (aid,) in get_db().execute("SELECT asset_id FROM assets WHERE asset_id LIKE ?", (stem + "%",)):
+        tail = aid[len(stem):]
+        if tail.isdigit():
+            nums.append(int(tail))
+    return f"{stem}{(max(nums) if nums else 0) + 1:03d}"
 
 
 # ---- Assets: read -----------------------------------------------------------
@@ -66,38 +127,57 @@ def filtered_assets(args):
 
 
 def filter_options():
-    """Distinct values used to fill the filter drop-downs."""
+    """Values used to fill the filter drop-downs."""
     db = get_db()
     return {
         "cpu_family": [r[0] for r in db.execute("SELECT DISTINCT cpu_family FROM assets ORDER BY 1")],
         "ram_gb": [r[0] for r in db.execute("SELECT DISTINCT ram_gb FROM assets ORDER BY 1")],
-        "location": [r[0] for r in db.execute("SELECT DISTINCT location FROM assets ORDER BY 1")],
+        "location": location_names(),
     }
 
 
 # ---- Assets: write ----------------------------------------------------------
 def insert_asset(c):
-    """c = validated dict with every key in FIELDS. May raise sqlite3.IntegrityError."""
+    """c = validated dict with every key in FIELDS. May raise sqlite3.IntegrityError
+    (the transaction is rolled back and the connection closed first)."""
     db = get_db()
-    db.execute(f"INSERT INTO assets ({','.join(FIELDS)}, active) VALUES ({','.join('?' * len(FIELDS))}, 1)",
-               [c[k] for k in FIELDS])
-    db.commit()
+    try:
+        db.execute(f"INSERT INTO assets ({','.join(FIELDS)}, active) VALUES ({','.join('?' * len(FIELDS))}, 1)",
+                   [c[k] for k in FIELDS])
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 def update_asset(asset_id, c):
     """The primary key (asset_id) is never changed."""
     db = get_db()
-    sets = ",".join(f"{k}=?" for k in FIELDS if k != "asset_id")
-    db.execute(f"UPDATE assets SET {sets} WHERE asset_id=?",
-               [c[k] for k in FIELDS if k != "asset_id"] + [asset_id])
-    db.commit()
+    try:
+        sets = ",".join(f"{k}=?" for k in FIELDS if k != "asset_id")
+        db.execute(f"UPDATE assets SET {sets} WHERE asset_id=?",
+                   [c[k] for k in FIELDS if k != "asset_id"] + [asset_id])
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 def set_active(asset_id, active):
     """Retire (0) or reactivate (1). Rows are never deleted, so history is kept."""
     db = get_db()
-    db.execute("UPDATE assets SET active=? WHERE asset_id=?", (active, asset_id))
-    db.commit()
+    try:
+        db.execute("UPDATE assets SET active=? WHERE asset_id=?", (active, asset_id))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 # ---- Maintenance ------------------------------------------------------------
@@ -109,14 +189,20 @@ def get_events(asset_id):
 def add_event(asset_id, f, cost, set_status=None, status_category=None, status_detail=None):
     """Save one maintenance event; optionally change the asset's status and current error in the same commit."""
     db = get_db()
-    db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
-               "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
-               (asset_id, f["event_date"], f["fault_category"], f["fault_description"],
-                f["action_taken"], f["technician"], cost))
-    if set_status:
-        db.execute("UPDATE assets SET status=?, status_category=?, status_detail=? WHERE asset_id=?",
-                   (set_status, status_category, status_detail, asset_id))
-    db.commit()
+    try:
+        db.execute("INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
+                   "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)",
+                   (asset_id, f["event_date"], f["fault_category"], f["fault_description"],
+                    f["action_taken"], f["technician"], cost))
+        if set_status:
+            db.execute("UPDATE assets SET status=?, status_category=?, status_detail=? WHERE asset_id=?",
+                       (set_status, status_category, status_detail, asset_id))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 def all_events():
@@ -124,7 +210,8 @@ def all_events():
 
 
 def fault_history(limit=None):
-    """Maintenance events across ALL assets, newest first, whatever their current status."""
+    """Maintenance events across ALL assets, newest first, whatever their current status.
+    a.status is included so the page can mark finished work as (Done)."""
     sql = ("SELECT m.*, a.model, a.location, a.status FROM maintenance m "
            "JOIN assets a ON a.asset_id=m.asset_id ORDER BY m.event_date DESC, m.id DESC")
     if limit is None:
@@ -177,8 +264,11 @@ def dashboard_data():
             "SELECT ram_gb, COUNT(*) AS n FROM assets WHERE active=1 GROUP BY ram_gb ORDER BY ram_gb")),
         "Storage type": _bars(_pairs(
             "SELECT storage_type, COUNT(*) AS n FROM assets WHERE active=1 GROUP BY storage_type ORDER BY n DESC")),
+        # every place is listed, including places with no assets yet (LEFT JOIN)
         "Assets per location": _bars(_pairs(
-            "SELECT location, COUNT(*) AS n FROM assets WHERE active=1 GROUP BY location ORDER BY n DESC")),
+            "SELECT l.name, COUNT(a.asset_id) AS n FROM locations l "
+            "LEFT JOIN assets a ON a.location=l.name AND a.active=1 "
+            "GROUP BY l.name ORDER BY n DESC, l.name")),
         "Warranty": _bars([("In warranty", in_warranty), ("Out of warranty", out_warranty)]),
     }
 

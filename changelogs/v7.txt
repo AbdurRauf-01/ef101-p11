@@ -1,0 +1,7 @@
+What changed:
+
+- GPU VRAM is a field in the form, the asset details page, the asset list, and the CSV export. It’s required whenever a GPU is listed, and it shows N/A for integrated graphics.
+- Locations are now a drop-down. Choose + Add new location to add one, for example Lab 4. It gets a short code (L4), appears on the dashboard right away, and shows with 0 assets until you add some. Typing a name that already exists, in any capitalization, reuses that place.
+- Asset ID is optional. If you leave it blank, the system assigns the next free number for the chosen place, such as LIB-PC-038. Retired IDs are never reused. You can still type an ID yourself.
+- Fault history shows “(Done)” after the action on every fault whose asset is currently Operational. A fault logged as Faulty appears in history without the mark. After logging the fix, both rows appear, and the fault now shows (Done).
+- Show all: every chart shows its top five entries, with a “Show all N” toggle when there are more. The toggle adjusts as new CPU families, GPUs, or places are added.

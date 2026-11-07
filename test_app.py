@@ -77,6 +77,8 @@ bad_cases = {
     "Invalid storage type": {"storage_type": "Floppy"},
     "Missing RAM type": {"ram_type": ""},
     "Unknown RAM type": {"ram_type": "DDR6"},
+    "GPU without VRAM": {"gpu": "NVIDIA RTX 3060", "gpu_vram_gb": ""},
+    "Unknown location": {"location": "Mars"},
     "Faulty, no category": {"status": "Faulty", "status_category": "", "status_detail": "x"},
     "Faulty, category not in list": {"status": "Faulty", "status_category": "Gremlins", "status_detail": "x"},
     "Faulty, no details": {"status": "Faulty", "status_category": "Unknown", "status_detail": ""},
@@ -210,7 +212,7 @@ spots = [body.find(f"<h2>{t}</h2>") for t in chart_titles]
 check("Chart order", "6 charts", "CPU family, GPU, RAM, Storage type, Assets per location, Warranty",
       all(p >= 0 for p in spots) and spots == sorted(spots))
 check("Fault chart shows Other and Unknown", "GET /dashboard", "both entries shown",
-      '<span class="lab">Other</span>' in body and '<span class="lab">Unknown</span>' in body)
+      '>Other</span>' in body and '>Unknown</span>' in body)
 check("Fault history not on dashboard", "GET /dashboard", "no Fault History heading there",
       "<h2>Fault History" not in body)
 check("Dashboard sits in a 4-column stat grid", "GET /dashboard", "class stats4 present",
@@ -284,7 +286,7 @@ check("Charts add up to total", "current data", "every chart sums to the active-
       sums_match_total(base))
 S = "SYNC-1"
 client.post("/assets/new", data={**GOOD, "asset_id": S, "ram_gb": "128", "ram_type": "DDR5",
-                                  "gpu": "NVIDIA RTX 4090", "purchase_date": "2020-01-01",
+                                  "gpu": "NVIDIA RTX 4090", "gpu_vram_gb": "24", "purchase_date": "2020-01-01",
                                   "warranty_expiry": "2021-01-01", "location": "Lab 3"})
 d1 = queries.dashboard_data()
 check("Add asset: RAM chart", "128 GB DDR5 added", "128 GB count +1",
@@ -353,6 +355,122 @@ d7 = queries.dashboard_data()
 check("Back to Operational: stats restore", "status Operational", "faulty and attention back to base",
       d7["stats"]["faulty"] == base["stats"]["faulty"]
       and d7["stats"]["attention"] == base["stats"]["attention"])
+
+# 14. Features added in this round: GPU VRAM, locations, automatic IDs, show-more, (Done) in history
+client.post("/assets/new", data={**GOOD, "asset_id": "GPU-1", "gpu": "NVIDIA RTX 4060", "gpu_vram_gb": "8"})
+check("GPU VRAM saved", "RTX 4060 with 8 GB", "gpu_vram_gb = 8",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='GPU-1' AND gpu_vram_gb=8") == 1)
+check("GPU VRAM shown on detail page", "GET /assets/GPU-1", "GPU VRAM row shows 8 GB",
+      "<dt>GPU VRAM</dt><dd>8 GB</dd>" in client.get("/assets/GPU-1").get_data(as_text=True))
+client.post("/assets/new", data={**GOOD, "asset_id": "GPU-2", "gpu": "", "gpu_vram_gb": "8"})
+check("VRAM ignored without a GPU", "no GPU, VRAM typed", "saved with VRAM NULL",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='GPU-2' AND gpu_vram_gb IS NULL") == 1)
+
+# 14b. Location drop-down, adding a new place, automatic asset IDs
+form_page = client.get("/assets/new").get_data(as_text=True)
+check("Location drop-down", "GET /assets/new", "existing places and '+ Add new location' offered",
+      "<option>Lab 1</option>" in form_page and f'value="{appmod.NEW_LOCATION}"' in form_page)
+n_loc = count("SELECT COUNT(*) FROM locations")
+n_assets = count("SELECT COUNT(*) FROM assets")
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": appmod.NEW_LOCATION, "new_location": "   "})
+check("Blank new location rejected", "'+ Add new location' with no name", "rejected, nothing saved",
+      count("SELECT COUNT(*) FROM assets") == n_assets and count("SELECT COUNT(*) FROM locations") == n_loc)
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": appmod.NEW_LOCATION, "new_location": "Lab 4"})
+check("Add new location", "'+ Add new location', name Lab 4", "location saved with prefix L4",
+      count("SELECT COUNT(*) FROM locations WHERE name='Lab 4' AND prefix='L4'") == 1)
+check("Asset in a new place gets an automatic ID", "asset ID left blank", "L4-PC-001 created in Lab 4",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='L4-PC-001' AND location='Lab 4'") == 1)
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": appmod.NEW_LOCATION, "new_location": "lab 4"})
+check("Typed name matches an existing place", "'lab 4' typed", "no duplicate place; second asset is L4-PC-002",
+      count("SELECT COUNT(*) FROM locations") == n_loc + 1
+      and count("SELECT COUNT(*) FROM assets WHERE asset_id='L4-PC-002' AND location='Lab 4'") == 1)
+check("Prefix for a new place", "Lab 4 when L4 is taken", "L42", queries.suggest_prefix("Lab 4", {"L4"}) == "L42")
+check("Prefix for Server Room", "Server Room", "SR", queries.suggest_prefix("Server Room", set()) == "SR")
+exp_id = queries.next_asset_id("LIB")
+client.post("/assets/new", data={**GOOD, "asset_id": "", "location": "Library"})
+check("Automatic asset ID for an existing place", "Library, ID left blank", f"{exp_id} assigned",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id=? AND location='Library'", exp_id) == 1)
+
+d_lab = queries.dashboard_data()
+check("New place on the dashboard", "Lab 4 has 2 assets", "Assets per location lists Lab 4 with 2",
+      chart(d_lab, "Assets per location").get("Lab 4") == 2)
+check("Charts add up after new places", "after new places", "every chart sums to the total",
+      sums_match_total(d_lab))
+
+before = chart(queries.dashboard_data(), "Assets per location")
+client.post("/assets/GPU-1/edit", data={**GOOD, "gpu": "NVIDIA RTX 4060", "gpu_vram_gb": "8",
+                                        "location": appmod.NEW_LOCATION, "new_location": "Lab 5"})
+mid = chart(queries.dashboard_data(), "Assets per location")
+check("Edit moves an asset to a new place", "GPU-1 moved to new Lab 5", "Lab 5 = 1 and Lab 1 down by 1",
+      mid.get("Lab 5") == 1 and mid["Lab 1"] == before["Lab 1"] - 1)
+client.post("/assets/GPU-1/edit", data={**GOOD, "gpu": "NVIDIA RTX 4060", "gpu_vram_gb": "8", "location": "Lab 1"})
+after = chart(queries.dashboard_data(), "Assets per location")
+check("Empty place stays listed", "Lab 5 now empty", "Lab 5 still shown with 0; Lab 1 back to before",
+      after.get("Lab 5") == 0 and after["Lab 1"] == before["Lab 1"])
+check("Asset ID stays the same after a move", "GPU-1 moved and back", "still GPU-1 (permanent identity)",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='GPU-1' AND location='Lab 1'") == 1)
+check("List filter matches dashboard", "GET /assets?location=Lab+4", "rows = dashboard count for Lab 4",
+      rows_in("/assets?location=Lab+4") == chart(queries.dashboard_data(), "Assets per location")["Lab 4"])
+
+# 14c. Show all / show top 5 on the dashboard
+d_now = queries.dashboard_data()
+body_now = client.get("/dashboard").get_data(as_text=True)
+long_lists = [rows for rows in d_now["charts"].values() if len(rows) > 5]
+if len(d_now["fault_cats"]) > 5:
+    long_lists.append(d_now["fault_cats"])
+check("Show all on long lists", "every list longer than 5", "one 'Show all N' per long list",
+      body_now.count('<details class="more">') == len(long_lists)
+      and all(f"Show all {len(r)}" in body_now for r in long_lists))
+
+# 14d. Fault history: faults, resolutions and (Done)
+ev_before = count("SELECT COUNT(*) FROM maintenance")
+client.post("/assets/new", data={**GOOD, "asset_id": "HIST-1"})
+client.post("/assets/HIST-1/maintenance", data={"event_date": "2026-03-01", "fault_category": "PSU failure",
+            "fault_description": "Will not power on", "action_taken": "Replaced faulty PSU", "technician": "Ali",
+            "cost": "40", "set_status": "Faulty", "status_category": "PSU failure", "status_detail": "No power"})
+h1 = client.get("/maintenance").get_data(as_text=True)
+check("Fault logged as Faulty is in history", "log fault, status Faulty", "listed, not yet (Done)",
+      "Will not power on" in h1 and "Replaced faulty PSU <span" not in h1)
+client.post("/assets/HIST-1/maintenance", data={"event_date": "2026-03-05", "fault_category": "PSU failure",
+            "fault_description": "Repair finished", "action_taken": "Swapped in new PSU unit", "technician": "Ali",
+            "cost": "0", "set_status": "Operational"})
+h2 = client.get("/maintenance").get_data(as_text=True)
+check("Resolved fault shows (Done)", "log the fix, status Operational",
+      "fault row and fix row both show (Done)",
+      'Replaced faulty PSU <span class="done">(Done)</span>' in h2
+      and 'Swapped in new PSU unit <span class="done">(Done)</span>' in h2)
+check("Fault and fix both counted", "2 more events", "fault events = before + 2",
+      count("SELECT COUNT(*) FROM maintenance") == ev_before + 2)
+
+client.post("/assets/new", data={**GOOD, "asset_id": "HIST-2"})
+client.post("/assets/HIST-2/maintenance", data={"event_date": "2026-03-08", "fault_category": "RAM fault",
+            "fault_description": "Blue screens", "action_taken": "Replaced fan module", "technician": "Ali",
+            "cost": "10", "set_status": "Faulty", "status_category": "RAM fault", "status_detail": "Blue screens"})
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Operational"})
+h3 = client.get("/maintenance").get_data(as_text=True)
+check("Resolved on the Edit form", "fault logged, then status set Operational on Edit",
+      "earlier fault now shows (Done)", 'Replaced fan module <span class="done">(Done)</span>' in h3)
+ev_now = count("SELECT COUNT(*) FROM maintenance")
+client.post("/assets/HIST-2/edit", data={**GOOD, "asset_id": "HIST-2", "status": "Under Repair",
+                                         "status_category": "RAM fault", "status_detail": "Bad stick"})
+check("Status set on Edit form is not a history row", "Under Repair set on Edit form",
+      "asset needs attention; no event written (use Log event to record a fault)",
+      count("SELECT COUNT(*) FROM maintenance") == ev_now
+      and count("SELECT COUNT(*) FROM assets WHERE asset_id='HIST-2' AND status='Under Repair'") == 1)
+
+# 14e. Final sync check: every view agrees with the same data
+d_end = queries.dashboard_data()
+check("Final: charts add up", "end state", "every chart sums to the total", sums_match_total(d_end))
+check("Final: list matches dashboard", "GET /assets", "row count = dashboard total",
+      rows_in("/assets") == d_end["stats"]["total"])
+check("Final: attention list matches its card", "GET /dashboard", "list length = Needing attention",
+      len(d_end["attention"]) == d_end["stats"]["attention"])
+exp_csv = list(csv.reader(io.StringIO(client.get("/export/assets.csv").get_data(as_text=True))))
+check("Final: assets CSV matches dashboard", "GET /export/assets.csv", "rows = total; has gpu_vram_gb and location",
+      len(exp_csv) - 1 == d_end["stats"]["total"] and "gpu_vram_gb" in exp_csv[0] and "location" in exp_csv[0])
+mexp = list(csv.reader(io.StringIO(client.get("/export/maintenance.csv").get_data(as_text=True))))
+check("Final: maintenance CSV matches history", "GET /export/maintenance.csv", "rows = fault events",
+      len(mexp) - 1 == d_end["stats"]["events"])
 
 # ---- report ----
 w = [max(len(str(r[i])) for r in results + [("Test", "Input", "Expected", "Result")]) for i in range(4)]

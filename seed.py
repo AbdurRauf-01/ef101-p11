@@ -12,6 +12,14 @@ random.seed(101)
 # Fixed reference date (not date.today()) so the demo data is identical on every run and every day.
 TODAY = date(2026, 10, 9)
 
+# Places, and the short code used for their asset IDs (order matters: it keeps the demo reproducible).
+LOCATION_PREFIX = {"Lab 1": "L1", "Lab 2": "L2", "Lab 3": "L3", "Server Room": "SRV",
+                   "Faculty Office": "FAC", "Library": "LIB"}
+LOCATIONS = list(LOCATION_PREFIX)
+
+# GPU memory in GB for the demo GPUs (integrated machines have no VRAM value).
+GPU_VRAM = {"NVIDIA GTX 1650": 4, "NVIDIA RTX 3060": 12, "NVIDIA RTX 3070": 8}
+
 # (manufacturer, model, cpu, cpu_family, ram, storage_type, storage_gb, gpu, os)
 CONFIGS = [
     ("Dell", "OptiPlex 3090", "Intel Core i5-10505", "Core i5", 8, "SSD", 256, "", "Windows 10 Pro"),
@@ -25,7 +33,6 @@ CONFIGS = [
     ("ASUS", "ExpertCenter D7", "AMD Ryzen 7 5700G", "Ryzen 7", 32, "NVMe", 1000, "NVIDIA RTX 3060", "Windows 11 Pro"),
     ("Custom", "Lab Workstation", "AMD Ryzen 9 5900X", "Ryzen 9", 64, "NVMe", 2000, "NVIDIA RTX 3070", "Ubuntu 22.04"),
 ]
-LOCATIONS = ["Lab 1", "Lab 2", "Lab 3", "Server Room", "Faculty Office", "Library"]
 FAULTS = {
     "Disk failure": ("Drive reporting SMART errors / not detected", "Replaced drive and reinstalled OS", 55),
     "Overheating": ("Random shutdowns under load", "Cleaned fans, replaced thermal paste", 15),
@@ -55,13 +62,12 @@ def rand_date(start, end):
 def main():
     init_db()
     conn = get_db()
+    conn.executemany("INSERT INTO locations (name,prefix) VALUES (?,?)", list(LOCATION_PREFIX.items()))
     assets = []
     for i in range(1, 41):
         c = random.choice(CONFIGS)
         loc = random.choice(LOCATIONS)
-        prefix = {"Lab 1": "L1", "Lab 2": "L2", "Lab 3": "L3", "Server Room": "SRV",
-                  "Faculty Office": "FAC", "Library": "LIB"}[loc]
-        aid = f"{prefix}-PC-{i:03d}"
+        aid = f"{LOCATION_PREFIX[loc]}-PC-{i:03d}"
         purchase = rand_date(date(2019, 1, 1), date(2025, 12, 31))
         warranty_years = random.choice([1, 3, 3, 3, 5])
         try:
@@ -115,12 +121,13 @@ def main():
         cat, detail = current.get(a[0], (None, None))
         # RAM type: every CPU in the demo list supports DDR4, so DDR4 is used for all demo assets.
         ram_type = "DDR4"
-        rows.append([a[0], a[1], a[2], a[3], a[4], a[5], ram_type, a[6], a[7], a[8], a[9], a[10],
+        vram = GPU_VRAM.get(a[8]) if a[8] else None
+        rows.append([a[0], a[1], a[2], a[3], a[4], a[5], ram_type, a[6], a[7], a[8], vram, a[9], a[10],
                      a[11], a[12], a[13], a[14], cat, detail, a[15]])
     conn.executemany(
         "INSERT INTO assets (asset_id,manufacturer,model,cpu,cpu_family,ram_gb,ram_type,storage_type,"
-        "storage_gb,gpu,os,ip_address,location,purchase_date,warranty_expiry,status,status_category,"
-        "status_detail,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        "storage_gb,gpu,gpu_vram_gb,os,ip_address,location,purchase_date,warranty_expiry,status,status_category,"
+        "status_detail,active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     conn.executemany(
         "INSERT INTO maintenance (asset_id,event_date,fault_category,fault_description,"
         "action_taken,technician,cost_usd) VALUES (?,?,?,?,?,?,?)", events)

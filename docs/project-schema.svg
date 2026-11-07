@@ -65,11 +65,11 @@
 <text x="1028" y="170" font-size="14" font-weight="bold" fill="#1d2733" text-anchor="start">assets</text>
 <text x="1028" y="192" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">asset_id (PK) · manufacturer · model</text>
 <text x="1028" y="209" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">cpu · cpu_family · ram_gb · ram_type</text>
-<text x="1028" y="226" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">storage_type · storage_gb · gpu · os</text>
-<text x="1028" y="243" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">ip_address · location</text>
-<text x="1028" y="260" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">purchase_date · warranty_expiry</text>
-<text x="1028" y="277" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">status · current error (category, detail)</text>
-<text x="1028" y="294" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">active (0 = retired, kept)</text>
+<text x="1028" y="226" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">storage_type · storage_gb · os</text>
+<text x="1028" y="243" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">gpu · gpu_vram_gb · ip_address</text>
+<text x="1028" y="260" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">location (FK → locations) · purchase_date</text>
+<text x="1028" y="277" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">warranty_expiry · active (0 = retired)</text>
+<text x="1028" y="294" font-size="12" font-weight="normal" fill="#64707d" text-anchor="start">status · current error (category, detail)</text>
 <line x1="1185" y1="314" x2="1185" y2="340" stroke="#14213d" stroke-width="2"/>
 <text x="1195" y="330" font-size="11.5" font-weight="bold" fill="#14213d" text-anchor="start">1 asset : N events</text>
 <rect x="1014" y="346" width="342" height="112" rx="6" fill="#f4f6f9" stroke="#c9d1db" stroke-width="1"/>
@@ -123,7 +123,7 @@
 <text x="890" y="718" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">style.css: all styling, no libraries</text>
 <rect x="724" y="734" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="752" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">test_app.py</text>
-<text x="890" y="752" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">90 automated checks on a temporary database</text>
+<text x="890" y="752" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">120 automated checks on a temporary database</text>
 <rect x="724" y="768" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="786" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">README.md</text>
 <text x="890" y="786" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">how to run, rules, tool and AI disclosure</text>

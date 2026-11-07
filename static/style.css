@@ -89,3 +89,8 @@ pre.code{margin:0;padding:14px;background:var(--input);border:1px solid var(--li
 .stat .n.small{font-size:1.5rem}
 @media (max-width:1000px){.g3{grid-template-columns:repeat(2,minmax(0,1fr))}.stats4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.g3,.stats4{grid-template-columns:1fr}}
+details.more{margin-top:6px}
+details.more summary{cursor:pointer;color:var(--accent);font-size:.85rem;font-weight:600;list-style:none;padding:4px 0}
+details.more summary::-webkit-details-marker{display:none}
+details.more[open] .when-closed,details.more:not([open]) .when-open{display:none}
+.done{color:var(--ok);font-weight:600}

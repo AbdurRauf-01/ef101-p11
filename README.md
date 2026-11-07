@@ -10,7 +10,7 @@ Flask + SQLite web app that tracks computer assets (specs, location, warranty, s
 pip install flask
 python seed.py        # optional: wipes and recreates inventory.db with demo data
 python app.py         # open http://127.0.0.1:5000
-python test_app.py    # runs 90 checks on a temporary database, prints a results table
+python test_app.py    # runs 120 checks on a temporary database, prints a results table
 ```
 No Internet is needed: the app uses no external libraries (plain CSS in `static/style.css`; dashboard charts are CSS bars).
 
@@ -29,6 +29,10 @@ No Internet is needed: the app uses no external libraries (plain CSS in `static/
 - **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately in the dashboard's Fault history, whatever the status.
 - **Current error**: a Faulty or Under Repair asset must choose an error category (the fault list plus N/A, Unknown, Other) and write the details (or `Unknown`). Operational assets show N/A. Set on the edit form or when logging an event.
 - **Fault categories**: maintenance events use a fixed drop-down (Disk failure, Overheating, Network issue, RAM fault, OS corruption, Display issue, PSU failure, Other, Unknown). The failure chart always shows every category; anything unexpected is counted as Other.
+- **Locations**: a place is chosen from a drop-down, or added with **+ Add new location** (it then appears on the dashboard, even while empty). Each place has a short code (for example Lab 4 = `L4`).
+- **Asset IDs**: optional. If left blank, the next free ID for the chosen place is assigned (for example `LIB-PC-038`). Retired IDs are never reused.
+- **GPU VRAM**: required (GB) whenever a GPU is listed; integrated machines show N/A.
+- **Fault history**: every fault event is listed, whatever the asset's status. Once an asset is Operational again, its events show (Done). Status changed on the Edit form is not a history row; record faults with Log event.
 - **RAM type**: DDR1 to DDR5 drop-down, required for every asset (12th to 14th gen Intel CPUs can take DDR4 or DDR5, so the type is recorded per machine).
 - **Dashboard charts** are computed from the same active-asset query as the totals, so the charts always add up to the total.
 - **Warranty label**: `WARRANTY_SOON_DAYS` (30) at the top of `queries.py` sets the Expiring soon window.

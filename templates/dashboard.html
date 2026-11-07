@@ -1,6 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
+{# One bar list. The 5 largest rows always show; the rest sit behind "Show all" so long lists stay compact. #}
+{% macro bar_rows(rows, color='') -%}
+  {% for label, n, w in rows[:5] %}
+  <div class="bar"><span class="lab" title="{{ label }}">{{ label }}</span>
+  <span class="track"><span class="fill" style="width:{{ w }}%;{{ 'background:' ~ color ~ ';' if color }}display:block"></span></span>
+  <span class="val">{{ n }}</span></div>
+  {% endfor %}
+  {% if rows|length > 5 %}
+  <details class="more"><summary><span class="when-closed">Show all {{ rows|length }}</span><span class="when-open">Show top 5 only</span></summary>
+  {% for label, n, w in rows[5:] %}
+  <div class="bar"><span class="lab" title="{{ label }}">{{ label }}</span>
+  <span class="track"><span class="fill" style="width:{{ w }}%;{{ 'background:' ~ color ~ ';' if color }}display:block"></span></span>
+  <span class="val">{{ n }}</span></div>
+  {% endfor %}
+  </details>
+  {% endif %}
+{%- endmacro %}
+
 <h1>Dashboard</h1>
 <div class="grid stats4">
   <div class="card stat"><div class="n">{{ stats.total }}</div><div class="l">Total active assets</div></div>
@@ -16,23 +34,14 @@
 <h2>Hardware distribution</h2>
 <div class="grid g3">
 {% for title, rows in charts.items() %}
-<div class="card"><h2>{{ title }}</h2>
-{% for label, n, w in rows %}
-  <div class="bar"><span class="lab" title="{{ label }}">{{ label }}</span>
-  <span class="track"><span class="fill" style="width:{{ w }}%;display:block"></span></span>
-  <span class="val">{{ n }}</span></div>
-{% endfor %}</div>
+<div class="card"><h2>{{ title }}</h2>{{ bar_rows(rows) }}</div>
 {% endfor %}
 </div>
 
 <h2>Failure analysis</h2>
 <div class="grid g2">
 <div class="card"><h2>Fault events by category</h2>
-{% for label, n, w in fault_cats %}
-  <div class="bar"><span class="lab">{{ label }}</span>
-  <span class="track"><span class="fill" style="width:{{ w }}%;background:var(--bad);display:block"></span></span>
-  <span class="val">{{ n }}</span></div>
-{% endfor %}
+{{ bar_rows(fault_cats, 'var(--bad)') }}
 {% if fault_cats and fault_cats[0][1] > 0 %}<p><b>Most common fault category:</b> {{ fault_cats[0][0] }} ({{ fault_cats[0][1] }} events)</p>{% endif %}</div>
 <div class="card"><h2>Most frequently failing assets</h2>
 <table><tr><th>Asset</th><th>Model</th><th>Events</th><th class="right">Cost</th></tr>
