@@ -28,7 +28,7 @@ Put your real name and ID in the contribution table (section 9 of the report) an
 **What you must do**
 
 1. Run `python seed.py`, then open `inventory.db` in DB Browser for SQLite. Write down both tables, their keys and the relationship.
-2. In DB Browser, **Execute SQL** tab, write these 5 queries yourself and check they match the dashboard: total active assets (38), out of warranty (25 on 7 Nov 2026), needs attention (6); the warranty number changes with the date because warranty is computed from today's date, most failing asset (`L1-PC-009`, 6 events), top fault category (Disk failure, 14). Screenshot each result: this is your testing evidence for "dashboard numbers match the data".
+2. In DB Browser, **Execute SQL** tab, write these 5 queries yourself and check they match the dashboard: total active assets (38), out of warranty (25 on 7, 8 and 9 Nov 2026), needs attention (6); the warranty number changes with the date because warranty is computed from today's date, most failing asset (`L1-PC-009`, 6 events), top fault category (Disk failure, 14). Screenshot each result: this is your testing evidence for "dashboard numbers match the data".
 3. **Your own change:** the warranty-after-purchase `CHECK` already exists, so add a different one: `CHECK (storage_gb <= 100000)` on the `assets` table in `schema.sql`. Re-run `python seed.py` and `python test_app.py`. If tests fail, undo the change and tell the team. (Abdur's rule below is about RAM, so the two do not overlap.)
 4. Practise the viva demo: close the app, make a copy of `inventory.db`, delete the original and start the app. It creates a new empty database with six places and no assets, so the dashboard shows zeros. Then run `python seed.py` (or put the copy back) to recover. Explain why a backup of this one file matters.
 5. Export `assets.csv` and `maintenance.csv` from the app and keep them as the "demo dataset" deliverable.
@@ -46,7 +46,7 @@ Put your real name and ID in the contribution table (section 9 of the report) an
 
 ## Abdur Rauf (EE-26138): Backend
 
-**Files:** `app.py`, `test_app.py`
+**Files:** `app.py`, `test_app.py`, `migrate.py`, the launcher scripts (`start.*`, `reset-demo-data.*`, `scripts/`) and `README.md`
 
 **What the code does**
 
@@ -55,7 +55,8 @@ Put your real name and ID in the contribution table (section 9 of the report) an
 - `warranty_status()` computes Active / Expiring soon / Expired from `warranty_expiry`. `parse_date()` and `today()` are helpers.
 - Routes: `/` and `/dashboard`, `/assets`, `/assets/new`, `/api/next-asset-id`, `/assets/<id>`, `/assets/<id>/edit`, `/assets/<id>/retire`, `/assets/<id>/reactivate`, `/assets/<id>/maintenance`, `/assets/<id>/fault/edit`, `/steps/<id>/edit|delete`, `/maintenance`, `/maintenance/<id>/edit|delete`, `/export/assets.csv`, `/export/maintenance.csv` and the `/about/...` pages.
 - `csv_response()` builds the CSV download (formula cells are escaped). `guard_requests()` refuses wrong Host headers and cross-site form posts, and `security_headers()` adds the protection headers. Error handlers show friendly pages for 400, 404, 405, 413, 500 and database errors.
-- `test_app.py` runs every check on a temporary database (your real data is never touched) and prints a results table.
+- `asset_edit()` loads the asset, and before showing the edit form turns the database row into a dictionary with blank text for empty values (the fix for the version 1 error described in report section 5).
+- `test_app.py` runs every check (229 in version 18) on a temporary database (your real data is never touched) and prints a results table.
 
 **What you must do**
 
@@ -73,6 +74,7 @@ Put your real name and ID in the contribution table (section 9 of the report) an
 - What is a route? What does Flask do?
 - Where is the needs-attention rule, and how do you change it?
 - What needs the Internet? (Nothing.) Name one limitation (no login).
+- What was the major error in version 1 and how was it fixed? (Editing an existing asset crashed because the form template calls `.get()` on a database row, which has no `get`; the edit route now passes a dictionary. Adding worked because it already passed a dictionary.)
 
 ---
 
@@ -95,7 +97,7 @@ Put your real name and ID in the contribution table (section 9 of the report) an
 1. Click through every page and take clean screenshots for the report: dashboard, asset list with a filter applied, add form with an error, asset detail with history.
 2. Map each page to its template and the data `app.py` passes in (for example `/assets` passes `assets`, `opts`, `f`).
 3. **Your own change:** add an OS column to the asset table: the headings come from `ASSET_COLUMNS` in `app.py` (ask Abdur to add `("os", "OS")` in the position you want, and `"os": "a.os"` to `SORT_COLUMNS` in `queries.py` so the heading can sort) and one `<td>{{ a.os }}</td>` goes in the same position in each row of `assets.html`. Also change one colour variable in `:root` of `style.css`. Check all pages still look right.
-4. Own the final report: assemble the sections from A and B, insert the schema image from `docs/project-schema.png` as Figure 1, export to PDF, check the page count (short report), and upload to Google Classroom.
+4. Own the final report: assemble the sections from Irteza and Abdur, insert the schema image from `docs/project-schema.png` as Figure 1, export to PDF, check the page count (short report), and upload to Google Classroom.
 5. Optional: record a 2 to 3 minute demo video (add an asset, log a fault, filter, dashboard, export).
 6. Write report sections 1, 2, 3 and 8.
 
