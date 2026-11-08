@@ -49,7 +49,7 @@ Run `python migrate.py` once (or `python migrate.py path/to/inventory.db`). It k
 - **From version 14-15.x** (the database already has `fault_steps`): everything is kept exactly as it is: assets, places and their range numbers, IP addresses, history, and the steps of open faults. The only change is that steps no longer carry a cost. The cost of an open fault stays on the asset as its single Updated Cost (if an open fault had none, the cost of its last step becomes the Updated Cost). Old steps that only held a cost (no action) are removed.
 - **From version 8-13** (no `fault_steps` table): incomplete history entries (a blank or Unknown field) are removed, valid entries logged while a fault was open become its steps, invalid or repeated IP addresses are left as Not Assigned, and everything removed or changed is listed on screen.
 
-## How it works
+## Rules to document in the report
 - **Cost**: A single *Updated Cost* ($) box is used across all forms. Rather than adding up a price for every step, the person entering data controls the current total directly. When a fault is closed to Operational, the final maintenance history entry records this Updated Cost. A typed `0` is a real cost of 0 and is saved as 0 (on the Edit form and on the Log form); a blank box keeps the current total.
 - **Editable records**: To fix grammatical mistakes or typos, all items in *Maintenance history*, *Current fault*, and open fault steps can be edited directly.
 - **Asset IDs**: Auto-generated from the chosen location (e.g. `L1-PC-041`) if not manually entered. The user can enter a custom Asset ID or simply select the place to have the next available ID assigned automatically.
@@ -85,7 +85,7 @@ Run `python migrate.py` once (or `python migrate.py path/to/inventory.db`). It k
 |---|---|---|
 | Irteza Raza (EE-26129) | Database: `schema.sql`, `db.py`, `queries.py`, `seed.py`, `inventory.db` | Built the database files using Claude. Fixed IP address handling, current-fault editing, maintenance history management and the Fault History table using Claude. Added the GPU VRAM field and the Delete and Edit buttons in maintenance history using Claude. |
 | Abdur Rauf (EE-26138) | Backend: `app.py`, `test_app.py`, `migrate.py`, launcher scripts, README | Built these files and the interface using Claude. Fixed the major asset editing error (see the report, section 5), cost logic, dates, asset IDs, RAM types, dashboard sorting, the asset editing page and unused code using Claude. Added the theme, sidebar, Credits, Privacy Policy, Contact, Fault History and Current error field using Claude. |
-| Hassan Majid (EE-26125) | Frontend: `templates/` (14 files), `static/style.css`, final report | Proposed the interface design, theme, sidebar implementation, sidebar sections and assets list sorting. |
+| Hassan Majid (EE-26125) | Frontend design (ideas); final report | Proposed the interface design, theme, sidebar implementation, sidebar sections and assets list sorting. |
 
 ## Limitations
 No login or user roles; data entry is manual; SQLite suits one site and few concurrent users; demo data is synthetic.
