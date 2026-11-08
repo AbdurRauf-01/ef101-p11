@@ -7,7 +7,7 @@ Deadline: Monday 9 Nov 2026. The code is already built and tested (`python test_
 |  | Irteza Raza<br>(EE-26129): Database | Abdur Rauf<br>(EE-26138): Backend | Hassan Majid<br>(EE-26125): Frontend |
 | --- | --- | --- | --- |
 | Files | `schema.sql`, `db.py`, `queries.py`, `seed.py`, `inventory.db` | `app.py`, `test_app.py`, `migrate.py`, Scripts, `README` | `templates/` (14 files), `static/style.css`, `docs/` diagram |
-| Report sections | 4 Data design, 7 Results | 5 Main code segments, 6 Testing | 1 Problem, 2 Architecture, 3 Technology, 8 Limitations |
+| Report sections | 4 Data design, 7 Results, 8 Limitations | 1 Problem, 5 Main code segments, 6 Testing, 7 Results, 8 Limitations | 1 Problem, 2 Architecture, 3 Technology, 7 Results, 8 Limitations |
 | Extra | Demo dataset deliverable, data/storage description | README run steps, test evidence | Final report PDF + Classroom upload, demo video (optional), figures |
 
 Put your real name and ID in the contribution table (section 9 of the report) and in the README disclosure. Be honest about what you wrote, changed and checked yourself.
@@ -79,6 +79,8 @@ Put your real name and ID in the contribution table (section 9 of the report) an
 ---
 
 ## Hassan Majid (EE-26125): Frontend
+
+**Viva:** all frontend questions (templates, CSS, pages, charts, filters, forms) are Hassan's, even though the frontend code was written with AI help and checked by the team.
 
 **Files:** all 14 files in `templates/` (`base`, `assets`, `asset_form`, `asset_detail`, `asset_fault_edit`, `step_edit`, `maintenance`, `maintenance_edit`, `dashboard`, `message`, `about_credits`, `about_privacy`, `about_contact`, `about_schema`), `static/style.css`, and the diagram in `docs/`
 
