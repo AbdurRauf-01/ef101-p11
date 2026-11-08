@@ -31,7 +31,7 @@
   <td><span class="badge b-{{ e.status|replace(' ', '-') }}">{{ e.status }}</span></td>
   <td>{{ e.fault_category }}</td>
   <td>{{ e.fault_description or 'Not recorded' }}</td>
-  <td>{{ e.action_taken }}{% if e.status == 'Operational' %} <span class="done">(Done)</span>{% endif %}</td>
+  <td>{{ e.action_taken or 'Not recorded' }}{% if e.status == 'Operational' %} <span class="done">(Done)</span>{% endif %}</td>
   <td>{{ e.technician or 'Not recorded' }}</td>
   <td class="right nw">{{ e.cost_usd|money }}</td>
   <td class="nw">

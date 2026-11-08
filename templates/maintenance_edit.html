@@ -9,15 +9,15 @@
 <div class="card">
 <form method="post" novalidate>
 <div class="formgrid">
-  <div><label>Event Date * (YYYY-MM-DD)</label><input type="date" name="event_date" value="{{ ev.get('event_date', '') }}"></div>
-  <div><label>Fault category *</label><select name="fault_category">
+  <div><label for="f-event_date">Event Date * (YYYY-MM-DD)</label><input type="date" name="event_date" value="{{ ev.get('event_date', '') }}" id="f-event_date"></div>
+  <div><label for="f-fault_category">Fault category *</label><select name="fault_category" id="f-fault_category">
     <option value="">— choose —</option>
     {% for o in fault_categories %}<option{{ ' selected' if ev.get('fault_category')==o }}>{{ o }}</option>{% endfor %}
   </select></div>
-  <div><label>Fault description *</label><input name="fault_description" value="{{ ev.get('fault_description', '') }}" placeholder="What went wrong?"></div>
-  <div><label>Action taken *</label><input name="action_taken" value="{{ ev.get('action_taken', '') }}" placeholder="What was done?"></div>
-  <div><label>Technician *</label><input name="technician" value="{{ ev.get('technician', '') }}" placeholder="Technician name"></div>
-  <div><label>Updated Cost ($)</label><input type="number" step="any" min="0" name="cost" value="{{ ev.get('cost') or ev.get('cost_usd') or 0 }}" placeholder="0"></div>
+  <div><label for="f-fault_description">Fault description *</label><input name="fault_description" value="{{ ev.get('fault_description', '') }}" placeholder="What went wrong?" id="f-fault_description"></div>
+  <div><label for="f-action_taken">Action taken *</label><input name="action_taken" value="{{ ev.get('action_taken', '') }}" placeholder="What was done?" id="f-action_taken"></div>
+  <div><label for="f-technician">Technician *</label><input name="technician" value="{{ ev.get('technician', '') }}" placeholder="Technician name" id="f-technician"></div>
+  <div><label for="f-cost">Updated Cost ($)</label><input type="number" step="any" min="0" name="cost" value="{{ ev.get('cost') or ev.get('cost_usd') or 0 }}" placeholder="0" id="f-cost"></div>
 </div>
 <p class="row" style="margin-top:16px">
   <button class="btn" type="submit">Save Changes</button>

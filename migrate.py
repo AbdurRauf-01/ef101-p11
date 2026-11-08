@@ -174,10 +174,16 @@ def main(db_path=None):
         new.executemany(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
                         [[r.get(c) for c in cols] for r in rows])
 
-    copy_rows("assets", assets)
-    copy_rows("maintenance", kept)
-    copy_rows("fault_steps", steps)
-    new.commit()
+    try:
+        copy_rows("assets", assets)
+        copy_rows("maintenance", kept)
+        copy_rows("fault_steps", steps)
+        new.commit()
+    except sqlite3.Error as e:      # e.g. an old row breaks a current rule: leave the original untouched
+        new.close()
+        tmp.unlink()
+        raise SystemExit(f"Migration stopped, your database was NOT changed (backup: {bak.name}). "
+                         f"A row does not fit the current rules: {e}")
 
     # 3. Check the new database before it replaces the old one.
     problems = []

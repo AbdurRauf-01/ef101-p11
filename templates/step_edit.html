@@ -9,9 +9,9 @@
 <div class="card">
 <form method="post" novalidate>
 <div class="formgrid">
-  <div><label>Step Date * (YYYY-MM-DD)</label><input type="date" name="step_date" value="{{ s.get('step_date', '') }}"></div>
-  <div><label>Action taken</label><input name="action" value="{{ s.get('action', '') }}" placeholder="Action description"></div>
-  <div><label>Technician</label><input name="technician" value="{{ s.get('technician', '') }}" placeholder="Technician name"></div>
+  <div><label for="f-step_date">Step Date * (YYYY-MM-DD)</label><input type="date" name="step_date" value="{{ s.get('step_date', '') }}" id="f-step_date"></div>
+  <div><label for="f-action">Action taken</label><input name="action" value="{{ s.get('action', '') }}" placeholder="Action description" id="f-action"></div>
+  <div><label for="f-technician">Technician</label><input name="technician" value="{{ s.get('technician', '') }}" placeholder="Technician name" id="f-technician"></div>
 </div>
 <p class="row" style="margin-top:16px">
   <button class="btn" type="submit">Save Changes</button>

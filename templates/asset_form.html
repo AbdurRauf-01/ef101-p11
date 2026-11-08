@@ -5,7 +5,7 @@
 <div class="card">
 <form method="post" novalidate>
 <div class="formgrid">
-  <div><label>Location *</label>
+  <div><label for="loc-select">Location *</label>
     <select name="location" id="loc-select" style="{{ 'display:none' if a.get('location')==NEW_LOCATION }}">
       <option value="">— choose —</option>
       {% for o in locations %}<option{{ ' selected' if a.get('location')==o }}>{{ o }}</option>{% endfor %}
@@ -13,25 +13,25 @@
     </select>
     <input name="new_location" id="loc-new" value="{{ a.get('new_location','') or '' }}"
            placeholder="Type the new location (Esc = back to list)" style="{{ '' if a.get('location')==NEW_LOCATION else 'display:none' }}"></div>
-  <div><label>Asset ID {{ '(blank = auto from location)' if new else '(permanent)' }}</label>
+  <div><label for="asset-id-input">Asset ID {{ '(blank = auto from location)' if new else '(permanent)' }}</label>
     <input name="asset_id" id="asset-id-input" value="{{ a.get('asset_id','') or '' }}" {{ '' if new else 'readonly' }} placeholder="auto, e.g. L1-PC-041 (or enter custom ID)"></div>
-  <div><label>Manufacturer *</label><input name="manufacturer" value="{{ a.get('manufacturer','') }}"></div>
-  <div><label>Model *</label><input name="model" value="{{ a.get('model','') }}"></div>
-  <div><label>CPU (full model) *</label><input name="cpu" value="{{ a.get('cpu','') }}" placeholder="Intel Core i5-12400"></div>
-  <div><label>CPU family *</label><input name="cpu_family" value="{{ a.get('cpu_family','') }}" placeholder="Core i5"></div>
-  <div><label>RAM (GB) *</label><input name="ram_gb" value="{{ a.get('ram_gb','') }}"></div>
-  <div><label>RAM type *</label><select name="ram_type"><option value="">— choose —</option>
+  <div><label for="f-manufacturer">Manufacturer *</label><input name="manufacturer" value="{{ a.get('manufacturer','') }}" id="f-manufacturer"></div>
+  <div><label for="f-model">Model *</label><input name="model" value="{{ a.get('model','') }}" id="f-model"></div>
+  <div><label for="f-cpu">CPU (full model) *</label><input name="cpu" value="{{ a.get('cpu','') }}" placeholder="Intel Core i5-12400" id="f-cpu"></div>
+  <div><label for="f-cpu_family">CPU family *</label><input name="cpu_family" value="{{ a.get('cpu_family','') }}" placeholder="Core i5" id="f-cpu_family"></div>
+  <div><label for="f-ram_gb">RAM (GB) *</label><input name="ram_gb" value="{{ a.get('ram_gb','') }}" id="f-ram_gb"></div>
+  <div><label for="f-ram_type">RAM type *</label><select name="ram_type" id="f-ram_type"><option value="">— choose —</option>
     {% for o in ram_types %}<option{{ ' selected' if a.get('ram_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Storage type *</label><select name="storage_type">
+  <div><label for="f-storage_type">Storage type *</label><select name="storage_type" id="f-storage_type">
     {% for o in storage_types %}<option{{ ' selected' if a.get('storage_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Storage capacity (GB) *</label><input name="storage_gb" value="{{ a.get('storage_gb','') }}"></div>
-  <div><label>GPU (blank = integrated)</label><input name="gpu" id="gpu-input" value="{{ a.get('gpu','') or '' }}" placeholder="NVIDIA RTX 3060"></div>
-  <div id="gpu-vram-container" style="display:contents">{% if a.get('gpu') %}<div><label>GPU VRAM (GB) *</label><input name="gpu_vram_gb" id="gpu-vram-input" value="{{ a.get('gpu_vram_gb','') or '' }}" placeholder="12"></div>{% endif %}</div>
-  <div><label>Operating system *</label><input name="os" value="{{ a.get('os','') }}"></div>
-  <div><label>IP address (blank = Not Assigned)</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="Not Assigned, e.g. 192.168.1.4"></div>
-  <div><label>Purchase date * (YYYY-MM-DD)</label><input type="date" name="purchase_date" value="{{ a.get('purchase_date','') }}"></div>
-  <div><label>Warranty expiry * (YYYY-MM-DD)</label><input type="date" name="warranty_expiry" value="{{ a.get('warranty_expiry','') }}"></div>
-  <div><label>Operational status</label><select name="status" id="status-select">
+  <div><label for="f-storage_gb">Storage capacity (GB) *</label><input name="storage_gb" value="{{ a.get('storage_gb','') }}" id="f-storage_gb"></div>
+  <div><label for="gpu-input">GPU (blank = integrated)</label><input name="gpu" id="gpu-input" value="{{ a.get('gpu','') or '' }}" placeholder="NVIDIA RTX 3060"></div>
+  <div id="gpu-vram-container" style="display:contents">{% if a.get('gpu') %}<div><label for="gpu-vram-input">GPU VRAM (GB) *</label><input name="gpu_vram_gb" id="gpu-vram-input" value="{{ a.get('gpu_vram_gb','') or '' }}" placeholder="12"></div>{% endif %}</div>
+  <div><label for="f-os">Operating system *</label><input name="os" value="{{ a.get('os','') }}" id="f-os"></div>
+  <div><label for="f-ip_address">IP address (blank = Not Assigned)</label><input name="ip_address" value="{{ a.get('ip_address','') or '' }}" placeholder="Not Assigned, e.g. 192.168.1.4" id="f-ip_address"></div>
+  <div><label for="f-purchase_date">Purchase date * (YYYY-MM-DD)</label><input type="date" name="purchase_date" value="{{ a.get('purchase_date','') }}" id="f-purchase_date"></div>
+  <div><label for="f-warranty_expiry">Warranty expiry * (YYYY-MM-DD)</label><input type="date" name="warranty_expiry" value="{{ a.get('warranty_expiry','') }}" id="f-warranty_expiry"></div>
+  <div><label for="status-select">Operational status</label><select name="status" id="status-select">
     {% for o in statuses %}<option{{ ' selected' if a.get('status')==o }}>{{ o }}</option>{% endfor %}</select></div>
 </div>
 
@@ -41,13 +41,13 @@
     history yet: each save updates the fault and its cost, and when the PC is Operational again the whole fault
     is recorded as one history entry. A blank fault category is saved as Unknown.</p>
   <div class="formgrid">
-    <div><label id="fx-cat">Fault category</label><select name="status_category">
+    <div><label id="fx-cat" for="f-status_category">Fault category</label><select name="status_category" id="f-status_category">
       {% for o in fault_categories %}<option{{ ' selected' if (a.get('status_category') or 'Unknown')==o }}>{{ o }}</option>{% endfor %}</select></div>
-    <div><label id="fx-desc">Fault description</label><input name="status_detail" value="{{ a.get('status_detail','') or '' }}" placeholder="What is wrong?"></div>
-    <div><label id="fx-act">Actions to be taken</label><input name="status_action" value="{{ a.get('status_action','') or '' }}" placeholder="Planned fix, or what was just done"></div>
-    <div><label id="fx-tech">Technician</label><input name="status_technician" value="{{ a.get('status_technician','') or '' }}" placeholder="Required when Under Repair"></div>
-    <div><label id="fx-date">Date</label><input type="date" name="fault_date" value="{{ a.get('fault_date') or today }}"></div>
-    <div><label id="fx-cost">Updated Cost ($)</label><input type="number" step="any" min="0" name="cost" value="{{ a.get('cost') or open_total or 0 }}" placeholder="0"></div>
+    <div><label id="fx-desc" for="f-status_detail">Fault description</label><input name="status_detail" value="{{ a.get('status_detail','') or '' }}" placeholder="What is wrong?" id="f-status_detail"></div>
+    <div><label id="fx-act" for="f-status_action">Actions to be taken</label><input name="status_action" value="{{ a.get('status_action','') or '' }}" placeholder="Planned fix, or what was just done" id="f-status_action"></div>
+    <div><label id="fx-tech" for="f-status_technician">Technician</label><input name="status_technician" value="{{ a.get('status_technician','') or '' }}" placeholder="Required when Under Repair" id="f-status_technician"></div>
+    <div><label id="fx-date" for="f-fault_date">Date</label><input type="date" name="fault_date" value="{{ a.get('fault_date') or today }}" id="f-fault_date"></div>
+    <div><label id="fx-cost" for="f-cost">Updated Cost ($)</label><input type="number" step="any" min="0" name="cost" value="{{ a.get('cost') or open_total or 0 }}" placeholder="0" id="f-cost"></div>
   </div>
 </div>
 
@@ -58,7 +58,7 @@
 <script>
 // "+ Add new location" turns the same box into a text field; Esc or an empty field goes back to the list.
 (function () {
-  var NEW = "{{ NEW_LOCATION }}";
+  var NEW = {{ NEW_LOCATION|tojson }};
   var isNewAsset = {{ 'true' if new else 'false' }};
   var sel = document.getElementById('loc-select'), inp = document.getElementById('loc-new');
   var aidInput = document.getElementById('asset-id-input');
@@ -107,14 +107,25 @@
   var gpuInput = document.getElementById('gpu-input');
   var container = document.getElementById('gpu-vram-container');
   if (!gpuInput || !container) return;
-  var cachedVram = "{{ a.get('gpu_vram_gb','') or '' }}";
+  var cachedVram = {{ (a.get('gpu_vram_gb','') or '')|string|tojson }};
 
   function syncGpu() {
     var hasGpu = gpuInput.value.trim().length > 0;
     var currentInput = document.getElementById('gpu-vram-input');
     if (hasGpu) {
       if (!currentInput) {
-        container.innerHTML = '<div><label>GPU VRAM (GB) *</label><input name="gpu_vram_gb" id="gpu-vram-input" value="' + (cachedVram || '') + '" placeholder="12"></div>';
+        var wrap = document.createElement('div');
+        var lab = document.createElement('label');
+        lab.htmlFor = 'gpu-vram-input';
+        lab.textContent = 'GPU VRAM (GB) *';
+        var inp = document.createElement('input');
+        inp.name = 'gpu_vram_gb';
+        inp.id = 'gpu-vram-input';
+        inp.value = cachedVram || '';        // set as a value, never pasted into HTML text
+        inp.placeholder = '12';
+        wrap.appendChild(lab);
+        wrap.appendChild(inp);
+        container.appendChild(wrap);
       }
     } else {
       if (currentInput) {
@@ -135,7 +146,7 @@
 (function () {
   var st = document.getElementById('status-select'), box = document.getElementById('fault-box');
   var title = document.getElementById('fx-title'), help = document.getElementById('fx-help');
-  var was = "{{ current_status or '' }}";
+  var was = {{ (current_status or '')|tojson }};
   function mark(id, text, req) { document.getElementById(id).textContent = text + (req ? ' *' : ''); }
   function sync() {
     var s = st.value;

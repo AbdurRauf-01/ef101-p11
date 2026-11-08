@@ -1,4 +1,4 @@
-# EF101-P11 Hardware Asset Inventory
+# EF101-P11 Computer Hardware Inventory and Maintenance System
 
 Flask + SQLite web app that tracks computer assets (specs, location, warranty, status) and their maintenance/fault history, with a dashboard and CSV export. All data in `inventory.db` is **DEMO data**, not real assets.
 
@@ -25,7 +25,7 @@ The app prints its address (http://127.0.0.1:5000, or the next free port if 5000
 - **First launch:** an empty database is created with the six standard places. Add assets from the app.
 - **Demo data (optional):** `python seed.py` replaces the data with 40 demo assets. It asks you to type YES first when there is data.
 - **Several copies at once:** each copy has its own data file and its own address, so you can run an older version (for example v7) next to this one to compare.
-- **Tests:** `python test_app.py` runs 192 checks on a temporary database and prints a results table.
+- **Tests:** `python test_app.py` runs every check on a temporary database and prints a results table.
 
 ## Files
 | File | Purpose |
@@ -38,6 +38,7 @@ The app prints its address (http://127.0.0.1:5000, or the next free port if 5000
 | `schema.sql` | The four tables: `locations`, `assets`, `fault_steps` (steps of an open fault) and `maintenance` (history) |
 | `seed.py` | Demo data generator (fixed random seed, reproducible) |
 | `migrate.py` | Upgrades an older `inventory.db` to the current version without losing data (backup kept, safe to run twice) |
+| `CHANGELOG.md` | What changed in each version |
 | `test_app.py` | Test evidence (add, edit, retire, invalid input, duplicates, filters, history, dashboard, export) |
 | `templates/`, `static/` | HTML (Jinja) pages and the stylesheet |
 
@@ -49,13 +50,13 @@ Run `python migrate.py` once (or `python migrate.py path/to/inventory.db`). It k
 - **From version 8-13** (no `fault_steps` table): incomplete history entries (a blank or Unknown field) are removed, valid entries logged while a fault was open become its steps, invalid or repeated IP addresses are left as Not Assigned, and everything removed or changed is listed on screen.
 
 ## Rules to document in the report
-- **Cost**: A single *Updated Cost* ($) box is used across all forms. Rather than forcing price stacking on intermediate steps, the inputer directly controls the current total cost. When a fault is closed to Operational, the final maintenance history entry records this Updated Cost. A typed `0` is a real cost of 0 and is saved as 0 (on the Edit form and on the Log form); a blank box keeps the current total.
+- **Cost**: A single *Updated Cost* ($) box is used across all forms. Rather than adding up a price for every step, the person entering data controls the current total directly. When a fault is closed to Operational, the final maintenance history entry records this Updated Cost. A typed `0` is a real cost of 0 and is saved as 0 (on the Edit form and on the Log form); a blank box keeps the current total.
 - **Editable records**: To fix grammatical mistakes or typos, all items in *Maintenance history*, *Current fault*, and open fault steps can be edited directly.
 - **Asset IDs**: Auto-generated from the chosen location (e.g. `L1-PC-041`) if not manually entered. The user can enter a custom Asset ID or simply select the place to have the next available ID assigned automatically.
 - **GPU VRAM**: The GPU VRAM input is dynamically displayed only when a dedicated GPU is entered. For machines with integrated graphics (blank GPU), the VRAM field is hidden.
-- **Fault history table**: Organised by default to show Operational assets first, then Faulty, then Under Repair, followed by Asset ID in alphabetical ascending order. Includes interactive column header sorting and status filtering.
+- **Fault history page** (sidebar: Fault History): lists every closed fault of every asset, newest first by default. Click a column heading to sort by it (click again to reverse); the Status heading cycles which status comes first.
 - **IP addresses**: optional. A blank IP is shown as Not Assigned; nothing is assigned automatically. Two PCs in the same place can never share an IP (a PC's IP is checked against the others in its place); different places may share one.
-- **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately in the dashboard's Fault history, whatever the status.
+- **Needs attention** (active assets only): status is Faulty or Under Repair, and nothing else. Past fault events are listed separately on the Fault History page, whatever the status.
 - **Current fault**: while a PC is Faulty or Under Repair, its fault (category, description, actions to be taken, technician, date, updated cost) is shown in its Current fault section. Nothing is written to the history while the fault is open. Under Repair requires a technician. A blank category is saved as Unknown.
 - **Steps of an open fault**: each save with a new action adds an audit step (its date, action and technician). A step has no cost of its own: the cost of the open fault is the single Updated Cost, so correcting the cost changes the total and adds no step. The steps are listed under Current fault.
 - **Closing a fault**: the PC is closed by setting it to Operational. Every fault field (category other than Unknown, description, action taken, technician) and the date are required; the cost is optional. The fault is then written to the history as ONE entry: its Action taken lists every step with its date, and its cost is the single Updated Cost.
@@ -67,7 +68,10 @@ Run `python migrate.py` once (or `python migrate.py path/to/inventory.db`). It k
 - **Warranty label**: `WARRANTY_SOON_DAYS` (30) at the top of `queries.py` sets the Expiring soon window.
 - **Warranty status** is computed from `warranty_expiry` (Active / Expiring soon / Expired), never stored.
 - **Retire** sets `active = 0`; the row and its history are kept. Reactivate reverses it.
-- **Validation**: required fields, RAM/storage positive integers, valid IP, valid dates, purchase date not in the future, warranty not before purchase, duplicate asset ID rejected, event cost_usd >= 0.
+- **Validation**: required fields, RAM/storage positive integers, valid IP, valid dates (always stored as YYYY-MM-DD, whatever format was typed), purchase date not in the future, warranty not before purchase, duplicate asset ID rejected (upper/lower case ignored), asset ID of letters, digits, `-` `.` `_` only (max 40), costs finite and between 0 and 1,000,000,000, a text box holds at most 500 characters, a location name at most 40.
+- **Local-only protections**: the app answers only to `127.0.0.1` / `localhost` (set `INVENTORY_ALLOWED_HOSTS` to add a name), refuses form posts sent from another website, and sends a Content-Security-Policy so the browser loads nothing from the internet. Debug mode is off; start with `FLASK_DEBUG=1` only when developing.
+- **Exports**: CSV cells that start with `=` `+` `-` `@` get a leading apostrophe so Excel/Calc cannot run them as formulas; files carry a UTF-8 byte-order mark so accents open correctly.
+- **Old databases**: starting the app on an `inventory.db` from an older version stops with a message to run `python migrate.py`.
 - All SQL uses `?` placeholders (no string-built values), so search input cannot inject SQL.
 
 ## Tool and AI disclosure (edit before submitting)

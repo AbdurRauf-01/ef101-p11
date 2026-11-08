@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1150" viewBox="0 0 1400 1150" font-family="DejaVu Sans, Arial, sans-serif">
 <defs><marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#14213d"/></marker></defs>
 <rect x="0" y="0" width="1400" height="1150" rx="0" fill="#fff"/>
-<text x="30" y="44" font-size="26" font-weight="bold" fill="#14213d" text-anchor="start">EF101-P11  Hardware Asset Inventory: project schema</text>
+<text x="30" y="44" font-size="26" font-weight="bold" fill="#14213d" text-anchor="start">EF101-P11  Computer Hardware Inventory and Maintenance System: project schema</text>
 <text x="30" y="70" font-size="14" font-weight="normal" fill="#64707d" text-anchor="start">Everything runs on one computer. No Internet needed: no external libraries are used.</text>
 <rect x="30" y="100" width="270" height="590" rx="8" fill="#fff" stroke="#2457c5" stroke-width="2"/>
 <path d="M30,108 a8,8 0 0 1 8,-8 h254 a8,8 0 0 1 8,8 v28 h-270 z" fill="#2457c5"/>
@@ -174,7 +174,7 @@
 <text x="890" y="992" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">style.css: all styling, no libraries</text>
 <rect x="724" y="1008" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="1026" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">test_app.py</text>
-<text x="890" y="1026" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">192 automated checks on a temporary database</text>
+<text x="890" y="1026" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">automated checks on a temporary database</text>
 <rect x="724" y="1042" width="632" height="28" rx="4" fill="#f4f6f9"/>
 <text x="738" y="1060" font-size="13" font-weight="bold" fill="#2457c5" text-anchor="start">README.md</text>
 <text x="890" y="1060" font-size="12.5" font-weight="normal" fill="#1d2733" text-anchor="start">how to run, rules, tool and AI disclosure</text>

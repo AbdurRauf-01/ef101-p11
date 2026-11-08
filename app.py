@@ -6,22 +6,33 @@ import argparse
 import csv
 import io
 import ipaddress
+import math
 import os
+import re
 import socket
 import sqlite3
 from datetime import date, datetime, timedelta
+from urllib.parse import urlsplit
 
 from flask import (Flask, Response, flash, redirect, render_template, request,
                    send_from_directory, url_for)
 
 import queries
-from db import BASE, DB_PATH, ensure_database
+from db import BASE, DB_PATH, ensure_database, schema_problem
 from queries import (CURRENT_ERROR_STATUSES, CURRENT_FAULT_FIELDS, FAULT_CATEGORIES, FIELDS,
                      RAM_TYPES, SORT_COLUMNS, WARRANTY_SOON_DAYS)
 
 app = Flask(__name__)
-GITHUB_URL = "https://github.com/AbdurRauf-01/ef101-fall2026-p11"
-app.secret_key = "ef101-demo-key"  # demo only; no real secrets in this project
+GITHUB_URL = "https://github.com/AbdurRauf-01/ef101-p11"
+# The key only signs the flash messages. A fresh random key per start is fine (messages are one-request only).
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24).hex()
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024        # no form in this app is anywhere near 64 KB
+
+MAX_FIELD = 500                                      # longest text any single form box may hold
+MAX_COST = 1_000_000_000
+ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
+LOCATION_MAX = 40
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]", "testserver"}
 
 # Allowed values below must match the CHECK constraints in schema.sql.
 STATUSES = ["Operational", "Faulty", "Under Repair"]
@@ -61,8 +72,8 @@ def fault_current_first():
 
 
 def fault_sort_link(col):
-    """Link for a column heading in Fault History. A new column starts descending for date/cost, ascending for text.
-    Clicking the same column flips direction. The Status heading cycles the first status group."""
+    """Link for a column heading in Fault History. A new column starts ascending; the same column flips direction.
+    The Status heading cycles the first status group. (The page itself opens sorted by date, newest first.)"""
     args = request.args.to_dict()
     key, direction = fault_current_sort()
     if col == "status":
@@ -108,12 +119,58 @@ def sort_link(col):
     return url_for("assets", **args)
 
 
+@app.before_request
+def guard_requests():
+    """Protections for a local-only app: only answer requests addressed to this computer (blocks DNS rebinding),
+    refuse form posts that come from another website (blocks cross-site request forgery), and cap field size."""
+    try:
+        hostname = urlsplit("//" + request.host).hostname
+    except ValueError:
+        hostname = None
+    extra = {h.strip().lower() for h in os.environ.get("INVENTORY_ALLOWED_HOSTS", "").split(",") if h.strip()}
+    if hostname not in LOCAL_HOSTS | extra:
+        return render_template("message.html", title="Wrong address",
+                               text="Open this app at http://127.0.0.1 (the address printed when it starts)."), 400
+    if request.method == "POST":
+        site = request.headers.get("Sec-Fetch-Site")      # sent by every current browser
+        origin = request.headers.get("Origin")
+        # Another website or another local port ("same-site") is refused. Browsers without Sec-Fetch-Site are
+        # judged by the Origin header instead.
+        if site in ("cross-site", "same-site") or \
+                (site is None and origin is not None and urlsplit(origin).netloc != request.host):
+            return render_template("message.html", title="Request refused",
+                                   text="This form was sent from another website, so it was not saved."), 403
+        for value in request.form.values():
+            if len(value) > MAX_FIELD:
+                return render_template("message.html", title="Text too long",
+                                       text=f"A box holds at most {MAX_FIELD} characters. Go back and shorten it."), 400
+
+
+@app.after_request
+def security_headers(resp):
+    """The app never loads anything from the internet; the policy makes the browser enforce that."""
+    resp.headers.setdefault("Content-Security-Policy",
+                            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                            "img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'")
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")      # "no-referrer" makes browsers send Origin: null
+    return resp
+
+
+def flash_errors(errors):
+    """Show each distinct message once, in the order found."""
+    for e in dict.fromkeys(errors):
+        flash(e, "danger")
+
+
 @app.context_processor
 def option_lists():
     """Drop-down choices and helpers, available to every template."""
     return dict(storage_types=STORAGE_TYPES, statuses=STATUSES, ram_types=RAM_TYPES,
                 fault_categories=FAULT_CATEGORIES, locations=queries.location_names(),
-                NEW_LOCATION=NEW_LOCATION, sort_link=sort_link, today=date.today().isoformat())
+                NEW_LOCATION=NEW_LOCATION, sort_link=sort_link, today=date.today().isoformat(),
+                github_url=GITHUB_URL)
 
 
 @app.template_filter("money")
@@ -128,7 +185,10 @@ def today():
 
 def warranty_status(expiry):
     t = date.today()
-    exp = date.fromisoformat(expiry)
+    try:
+        exp = date.fromisoformat(expiry)
+    except (TypeError, ValueError):
+        return "Unknown"         # a damaged date must never break the whole list
     if exp < t:
         return "Expired"
     if exp <= t + timedelta(days=WARRANTY_SOON_DAYS):
@@ -161,6 +221,20 @@ def resolve_location(form):
     return typed, True
 
 
+def location_problems(name, is_new_loc):
+    """Problems with the place chosen or typed on the Add / Edit form."""
+    if is_new_loc:
+        if not name:
+            return ["Type the name of the new location (for example Lab 4)."]
+        if name == NEW_LOCATION or len(name) > LOCATION_MAX:
+            return [f"A location name can have at most {LOCATION_MAX} characters."]
+        if queries.next_subnet() > 254:
+            return ["No more places can be added: the IP range numbers 1 to 254 are all used."]
+    elif name and name not in queries.location_names():
+        return ["Choose a place from the list."]
+    return []
+
+
 def existing_or_new_prefix(name, is_new):
     """Short code used for the asset IDs of this place."""
     if is_new:
@@ -183,7 +257,7 @@ def parse_cost(text):
     """Returns (cost, error). Blank = 0."""
     try:
         value = float(text or 0)
-        if value < 0:
+        if not math.isfinite(value) or value < 0 or value > MAX_COST:
             raise ValueError
         return value, None
     except ValueError:
@@ -233,7 +307,7 @@ def first_step(box, was_open, prev_action):
 
 def validate_asset(f, is_new, subnet, prev=None):
     """Server-side validation. Returns (clean_dict, errors_list).
-    subnet is no longer used for IP addresses (no automatic assignment); it is kept for the place table.
+    subnet is not used here (IP addresses are never assigned automatically); it is only passed along for new places.
     prev = the asset as it is in the database (None for a new asset)."""
     errors = []
     c = {k: (f.get(k) or "").strip() for k in FIELDS}
@@ -242,6 +316,8 @@ def validate_asset(f, is_new, subnet, prev=None):
             errors.append(f"{k.replace('_', ' ').title()} is required.")
     if not c["asset_id"]:
         errors.append("Choose a location so the asset ID can be assigned automatically, or type an ID.")
+    elif is_new and not ASSET_ID_RE.match(c["asset_id"]):
+        errors.append("Asset ID may use letters, digits, - . and _ only (no spaces, at most 40 characters).")
     for k in ["ram_gb", "storage_gb"]:
         try:
             c[k] = int(c[k])
@@ -277,13 +353,9 @@ def validate_asset(f, is_new, subnet, prev=None):
             errors.append("Technician is required when the PC is Under Repair.")
         was_faulty = prev is not None and prev["status"] in CURRENT_ERROR_STATUSES
         c["status_date"] = prev["status_date"] if (was_faulty and prev["status_date"]) else today()
-        try:
-            c["status_cost"] = float(f.get("cost") or 0)
-            if c["status_cost"] < 0:
-                raise ValueError
-        except ValueError:
-            c["status_cost"] = 0.0
-            errors.append("Cost must be a number, zero or more.")
+        c["status_cost"], cost_error = parse_cost(f.get("cost"))
+        if cost_error:
+            errors.append(cost_error)
 
     # IP address: optional. Blank stays "Not Assigned" (no automatic assignment).
     # Two PCs in the same place never share an IP.
@@ -302,6 +374,10 @@ def validate_asset(f, is_new, subnet, prev=None):
     c["ip_address"] = c["ip_address"] or None
 
     p, w = parse_date(c["purchase_date"]), parse_date(c["warranty_expiry"])
+    if p:
+        c["purchase_date"] = p.isoformat()          # always stored as YYYY-MM-DD, whatever format was typed
+    if w:
+        c["warranty_expiry"] = w.isoformat()
     if not p:
         errors.append("Purchase date must be a valid date (YYYY-MM-DD).")
     elif p > date.today():
@@ -347,9 +423,8 @@ def asset_new():
         form = dict(request.form)
         name, is_new_loc = resolve_location(request.form)
         form["location"] = name
-        errors = []
-        if is_new_loc and not name:
-            errors.append("Type the name of the new location (for example Lab 4).")
+        shown = dict(form, location=NEW_LOCATION, new_location=name) if is_new_loc else form
+        errors = location_problems(name, is_new_loc)
         if name and not (form.get("asset_id") or "").strip():
             prefix = existing_or_new_prefix(name, is_new_loc)
             if prefix:
@@ -362,9 +437,8 @@ def asset_new():
         c, more = validate_asset(form, True, subnet)
         errors += more
         if errors:
-            for e in errors:
-                flash(e, "danger")
-            return render_template("asset_form.html", a=form, new=True, current_status=None)
+            flash_errors(errors)
+            return render_template("asset_form.html", a=shown, new=True, current_status=None)
         step = None
         if opens:
             c["status_date"] = box["date"].isoformat()
@@ -377,7 +451,7 @@ def asset_new():
         except sqlite3.IntegrityError as e:
             message = "Choose a place from the list." if "FOREIGN KEY" in str(e) else f"Database rejected the record: {e}"
             flash(message, "danger")
-            return render_template("asset_form.html", a=form, new=True, current_status=None)
+            return render_template("asset_form.html", a=shown, new=True, current_status=None)
         flash(f"Asset {c['asset_id']} added (IP {c['ip_address'] or 'Not Assigned'}).", "success")
         return redirect(url_for("asset_detail", asset_id=c["asset_id"]))
     return render_template("asset_form.html", a={}, new=True, current_status=None)
@@ -409,9 +483,8 @@ def asset_edit(asset_id):
         form["asset_id"] = asset_id                       # primary key is never changed
         name, is_new_loc = resolve_location(request.form)
         form["location"] = name
-        errors = []
-        if is_new_loc and not name:
-            errors.append("Type the name of the new location (for example Lab 4).")
+        shown = dict(form, location=NEW_LOCATION, new_location=name) if is_new_loc else form
+        errors = location_problems(name, is_new_loc)
         box = fault_box(form)
         was_open = current_status in CURRENT_ERROR_STATUSES
         closing = was_open and form.get("status") == "Operational"
@@ -421,9 +494,8 @@ def asset_edit(asset_id):
         c, more = validate_asset(form, False, subnet, a)
         errors += more
         if errors:
-            for e in errors:
-                flash(e, "danger")
-            return render_template("asset_form.html", a=form, new=False, current_status=current_status, open_total=open_total)
+            flash_errors(errors)
+            return render_template("asset_form.html", a=shown, new=False, current_status=current_status, open_total=open_total)
         if is_new_loc:
             queries.add_location(name, existing_or_new_prefix(name, True), subnet)
         if closing:
@@ -453,6 +525,8 @@ def asset_edit(asset_id):
 
 @app.route("/assets/<asset_id>/retire", methods=["POST"])
 def asset_retire(asset_id):
+    if not queries.get_asset(asset_id):
+        return render_template("message.html", title="Asset not found", text=f"No asset with ID '{asset_id}'."), 404
     queries.set_active(asset_id, 0)
     flash(f"{asset_id} retired. History is kept.", "success")
     return redirect(url_for("asset_detail", asset_id=asset_id))
@@ -460,6 +534,8 @@ def asset_retire(asset_id):
 
 @app.route("/assets/<asset_id>/reactivate", methods=["POST"])
 def asset_reactivate(asset_id):
+    if not queries.get_asset(asset_id):
+        return render_template("message.html", title="Asset not found", text=f"No asset with ID '{asset_id}'."), 404
     queries.set_active(asset_id, 1)
     flash(f"{asset_id} reactivated.", "success")
     return redirect(url_for("asset_detail", asset_id=asset_id))
@@ -486,14 +562,15 @@ def asset_fault_edit(asset_id):
             errors.append("Choose a valid fault category from the list.")
         if a["status"] == "Under Repair" and not f["status_technician"]:
             errors.append("Technician is required when Under Repair.")
-        cost, cost_error = parse_cost(f["cost"])
+        cost, cost_error = parse_optional_cost(f["cost"])     # blank = keep the current Updated Cost
         if cost_error:
             errors.append(cost_error)
         if errors:
-            for e in errors:
-                flash(e, "danger")
+            flash_errors(errors)
             return render_template("asset_fault_edit.html", a=dict(a, **f), fault_categories=FAULT_CATEGORIES)
-        queries.update_current_fault(asset_id, f["status_date"], f["status_category"] or "Unknown",
+        if cost is None:
+            cost = float(a["status_cost"] or 0)
+        queries.update_current_fault(asset_id, d.isoformat(), f["status_category"] or "Unknown",
                                      f["status_detail"], f["status_action"], f["status_technician"], cost)
         flash("Current fault updated.", "success")
         return redirect(url_for("asset_detail", asset_id=asset_id))
@@ -516,10 +593,9 @@ def step_edit(step_id):
         elif d > date.today():
             errors.append("Step date cannot be in the future.")
         if errors:
-            for e in errors:
-                flash(e, "danger")
+            flash_errors(errors)
             return render_template("step_edit.html", s=dict(s, **f))
-        queries.update_step(step_id, f["step_date"], f["action"], f["technician"])
+        queries.update_step(step_id, d.isoformat(), f["action"], f["technician"])
         flash("Fault step updated.", "success")
         return redirect(url_for("asset_detail", asset_id=s["asset_id"]))
     return render_template("step_edit.html", s=dict(s))
@@ -563,11 +639,10 @@ def maintenance_event_edit(event_id):
         if cost_error:
             errors.append(cost_error)
         if errors:
-            for e in errors:
-                flash(e, "danger")
+            flash_errors(errors)
             return render_template("maintenance_edit.html", ev=dict(f, id=event_id, asset_id=ev["asset_id"]),
                                    event_id=event_id, asset=asset, fault_categories=FAULT_CATEGORIES)
-        queries.update_maintenance_event(event_id, f["event_date"], f["fault_category"],
+        queries.update_maintenance_event(event_id, d.isoformat(), f["fault_category"],
                                          f["fault_description"], f["action_taken"], f["technician"], cost)
         flash("Maintenance history entry updated.", "success")
         return redirect(url_for("asset_detail", asset_id=ev["asset_id"]))
@@ -601,6 +676,8 @@ def maintenance_add(asset_id):
         errors.append("Event date must be a valid date (YYYY-MM-DD).")
     elif d > date.today():
         errors.append("Event date cannot be in the future.")
+    else:
+        f["event_date"] = d.isoformat()
     if new_status not in STATUSES:
         errors.append("Choose the status the asset will have: Operational, Faulty or Under Repair.")
     if f["fault_category"] and f["fault_category"] not in FAULT_CATEGORIES:
@@ -617,8 +694,7 @@ def maintenance_add(asset_id):
     if new_status in CURRENT_ERROR_STATUSES:
         f["fault_category"] = f["fault_category"] or "Unknown"
     if errors:
-        for e in errors:
-            flash(e, "danger")
+        flash_errors(errors)
         return redirect(url_for("asset_detail", asset_id=asset_id))
     current = None
     if new_status in CURRENT_ERROR_STATUSES:
@@ -688,12 +764,21 @@ def github():
 
 
 # ---- Exports -------------------------------------------------------------------
+def csv_safe(value):
+    """A cell that starts with = + - @ would run as a formula when the file is opened in Excel / Calc.
+    A leading apostrophe makes it plain text."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def csv_response(header, rows, filename):
     buf = io.StringIO()
+    buf.write("\ufeff")                      # byte-order mark: Excel then reads the file as UTF-8
     w = csv.writer(buf)
-    w.writerow(header)
+    w.writerow([csv_safe(h) for h in header])
     for r in rows:
-        w.writerow(list(r))
+        w.writerow([csv_safe(v) for v in r])
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename={filename}"})
 
@@ -716,6 +801,28 @@ def export_maintenance():
 @app.errorhandler(404)
 def not_found(e):
     return render_template("message.html", title="Page not found", text="That page does not exist."), 404
+
+
+@app.errorhandler(sqlite3.IntegrityError)
+def db_rejected(e):
+    return render_template("message.html", title="Not saved",
+                           text=f"The database rejected the data ({e}). Go back and check the form."), 400
+
+
+@app.errorhandler(413)
+def too_large(e):
+    return render_template("message.html", title="Too much data", text="That request is too large."), 413
+
+
+@app.errorhandler(405)
+def not_allowed(e):
+    return render_template("message.html", title="Not allowed", text="That address cannot be used this way."), 405
+
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template("message.html", title="Something went wrong",
+                           text="The page could not be built. Nothing was lost; go back and try again."), 500
 
 
 @app.errorhandler(sqlite3.OperationalError)
@@ -741,6 +848,10 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, help="port to use (default: the first free port from 5000)")
     args = parser.parse_args()
     created = ensure_database()           # first launch only: an empty database; existing data is kept
+    problem = schema_problem()
+    if problem:                           # an old copy of inventory.db: say what to do instead of failing later
+        raise SystemExit(f"\n{problem}\nUpgrade it without losing data:  python migrate.py\n"
+                         "(or start fresh with demo data:  python seed.py)")
     port = args.port or int(os.environ.get("PORT", 0)) or free_port()
     print("Hardware Inventory")
     print(f"  Open in your browser:  http://127.0.0.1:{port}")
@@ -748,4 +859,5 @@ if __name__ == "__main__":
     if created:
         print("  A new, empty database was created. Add assets, or run 'python seed.py' for demo data.")
     print("  Press Ctrl+C to stop.")
-    app.run(host="127.0.0.1", port=port, debug=True, use_reloader=False)
+    # debug mode (browser console that can run code) is off unless you ask for it: set FLASK_DEBUG=1
+    app.run(host="127.0.0.1", port=port, debug=os.environ.get("FLASK_DEBUG") == "1", use_reloader=False)

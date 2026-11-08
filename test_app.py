@@ -291,10 +291,10 @@ check("Project Schema page embeds the diagram", "GET /about/schema", "img tag po
       'src="/about/schema.svg"' in client.get("/about/schema").get_data(as_text=True))
 contact = client.get("/about/contact").get_data(as_text=True)
 check("Contact page", "GET /about/contact", "email and repository link present",
-      "0h0kgsuss@mozmail.com" in contact and "ef101-fall2026-p11" in contact)
+      "0h0kgsuss@mozmail.com" in contact and "AbdurRauf-01/ef101-p11" in contact)
 gh = client.get("/github")
 check("GitHub redirect", "GET /github", "302 to the repository",
-      gh.status_code == 302 and gh.headers.get("Location") == "https://github.com/AbdurRauf-01/ef101-fall2026-p11")
+      gh.status_code == 302 and gh.headers.get("Location") == "https://github.com/AbdurRauf-01/ef101-p11")
 credits = client.get("/about/credits").get_data(as_text=True)
 check("Credits content", "GET /about/credits", "all four people listed",
       all(n in credits for n in ["Dr. Fezan Rafique", "Irteza Raza", "Abdur Rauf", "Hassan Majid"]))
@@ -952,6 +952,112 @@ ship_cols = [r[1] for r in shipped.execute("PRAGMA table_info(fault_steps)")]
 shipped.close()
 check("Shipped inventory.db has the current structure", "PRAGMA table_info(fault_steps) on inventory.db",
       "no cost_usd column", "cost_usd" not in ship_cols and len(ship_cols) > 0)
+
+# 22. Hardening and bug fixes found in the v18 review
+def n_assets(aid):
+    return count("SELECT COUNT(*) FROM assets WHERE asset_id=?", aid)
+
+
+R = dict(GOOD, location="Lab 1")
+client.post("/assets/new", data={**R, "asset_id": "ISO-1", "purchase_date": "10/01/2025", "warranty_expiry": "10/01/2028"})
+row = count_rows("SELECT purchase_date, warranty_expiry FROM assets WHERE asset_id='ISO-1'")
+check("Typed dates are stored as ISO", "purchase 10/01/2025, warranty 10/01/2028", "2025-01-10 / 2028-01-10",
+      bool(row) and tuple(row[0]) == ("2025-01-10", "2028-01-10"))
+check("Asset list and export survive any date format", "GET /assets, /export/assets.csv after that save", "HTTP 200 for both",
+      client.get("/assets?show=all").status_code == 200 and client.get("/export/assets.csv").status_code == 200)
+
+for label, value in [("NaN", "nan"), ("Infinity", "inf"), ("Huge", "1e999"), ("Negative", "-1")]:
+    aid = f"COST-{label}"
+    client.post("/assets/new", data={**R, "asset_id": aid, "status": "Faulty", "status_category": "Unknown", "cost": value})
+    check(f"Cost {label} rejected", f"cost = {value}", "nothing saved", n_assets(aid) == 0)
+
+for aid in ("has space", "a/b", "q?x", "#hash", "<b>", "-lead", "x" * 41):
+    client.post("/assets/new", data={**R, "asset_id": aid})
+    check("Unsafe asset ID rejected", repr(aid[:12]), "nothing saved", n_assets(aid) == 0)
+client.post("/assets/new", data={**R, "asset_id": "test-001"})
+check("Asset ID duplicate ignores case", "test-001 vs TEST-001", "rejected", n_assets("test-001") == 0)
+
+r = client.post("/assets/NOPE-1/retire")
+check("Retire unknown asset", "POST /assets/NOPE-1/retire", "404, not 'retired'", r.status_code == 404)
+r = client.post("/assets/NOPE-1/reactivate")
+check("Reactivate unknown asset", "POST /assets/NOPE-1/reactivate", "404", r.status_code == 404)
+
+r = client.post("/assets/new", data={**R, "asset_id": "", "location": appmod.NEW_LOCATION, "new_location": "Lab 77",
+                                      "manufacturer": ""})
+html = r.get_data(as_text=True)
+check("Add-new-location survives a form error", "new place typed, manufacturer left blank",
+      "form reopens with the new-place box shown and filled",
+      'id="loc-select" style="display:none"' in html and 'value="Lab 77"' in html)
+client.post("/assets/new", data={**R, "asset_id": "NL-1", "location": appmod.NEW_LOCATION, "new_location": appmod.NEW_LOCATION})
+check("Reserved location name rejected", "new place named __new__", "nothing saved", n_assets("NL-1") == 0)
+client.post("/assets/new", data={**R, "asset_id": "NL-2", "location": appmod.NEW_LOCATION, "new_location": "L" * 41})
+check("Over-long location name rejected", "41 characters", "nothing saved", n_assets("NL-2") == 0)
+
+html = client.post("/assets/new", data={**R, "asset_id": "DUP-C", "status": "Faulty", "cost": "-5"}).get_data(as_text=True)
+check("A bad cost is reported once", "cost = -5 on a new faulty asset", "message appears once",
+      html.count("Cost must be a number") == 1)
+
+client.post("/assets/new", data={**R, "asset_id": "CSV-1", "model": "=1+1", "manufacturer": "@x"})
+line = [l for l in client.get("/export/assets.csv").get_data(as_text=True).splitlines() if l.startswith("CSV-1")]
+check("CSV export neutralises formulas", "model '=1+1', manufacturer '@x'", "cells start with an apostrophe",
+      bool(line) and "'=1+1" in line[0] and "'@x" in line[0])
+check("CSV export opens as UTF-8 in Excel", "GET /export/maintenance.csv", "starts with a byte-order mark",
+      client.get("/export/maintenance.csv").get_data(as_text=True).startswith("\ufeff"))
+
+client.post("/assets/new", data={**R, "asset_id": "FE-1", "status": "Faulty", "status_category": "Unknown", "cost": "40"})
+client.post("/assets/FE-1/fault/edit", data=dict(status_date="2026-03-10", status_category="Unknown", status_detail="",
+                                                 status_action="", status_technician="", cost=""))
+check("Edit fault: blank cost keeps the total", "cost 40, then blank", "still 40",
+      count("SELECT status_cost FROM assets WHERE asset_id='FE-1'") == 40)
+client.post("/assets/FE-1/fault/edit", data=dict(status_date="10/03/2026", status_category="Unknown", status_detail="",
+                                                 status_action="", status_technician="", cost="0"))
+check("Edit fault: 0 is saved, date stored as ISO", "cost 0, date 10/03/2026", "0 and 2026-03-10",
+      count("SELECT COUNT(*) FROM assets WHERE asset_id='FE-1' AND status_cost=0 AND status_date='2026-03-10'") == 1)
+
+r = client.post("/assets/FE-1/retire", headers={"Origin": "http://evil.example"})
+check("Cross-site form post refused", "POST with Origin http://evil.example", "403, nothing changed",
+      r.status_code == 403 and count("SELECT active FROM assets WHERE asset_id='FE-1'") == 1)
+r = client.post("/assets/FE-1/retire", headers={"Sec-Fetch-Site": "cross-site"})
+check("Cross-site fetch refused", "POST with Sec-Fetch-Site cross-site", "403", r.status_code == 403)
+r = client.post("/assets/FE-1/retire", headers={"Sec-Fetch-Site": "same-site", "Origin": "http://localhost:3000"})
+check("Another local port refused", "POST from localhost:3000 (same-site)", "403", r.status_code == 403)
+r = client.post("/assets/FE-1/reactivate", headers={"Sec-Fetch-Site": "same-origin", "Origin": "null"})
+check("Same-origin post accepted even with Origin null", "Sec-Fetch-Site same-origin", "not refused",
+      r.status_code == 302)
+r = client.get("/assets", headers={"Host": "evil.example"})
+check("Foreign Host header refused", "GET /assets with Host evil.example", "400 (blocks DNS rebinding)", r.status_code == 400)
+r = client.post("/assets/new", data={**R, "asset_id": "BIG-1", "model": "x" * 600})
+check("Over-long text refused", "600 characters in one box", "400, nothing saved", r.status_code == 400 and n_assets("BIG-1") == 0)
+hdr = client.get("/dashboard").headers
+check("Security headers present", "GET /dashboard", "CSP blocks outside requests, nosniff, no framing",
+      "default-src 'self'" in hdr.get("Content-Security-Policy", "") and hdr.get("X-Content-Type-Options") == "nosniff"
+      and hdr.get("X-Frame-Options") == "DENY")
+page = client.get("/dashboard").get_data(as_text=True) + client.get("/static/style.css").get_data(as_text=True)
+check("No page or stylesheet loads from the internet", "dashboard HTML + style.css", "no googleapis / gstatic / http(s) src",
+      "googleapis" not in page and "gstatic" not in page and not re.search(r"(src|href)=\"https?://(?!github.com)", page))
+
+client.post("/assets/new", data={**R, "asset_id": "SRCH-1", "model": "Odd_Model%X"})
+client.post("/assets/new", data={**R, "asset_id": "SRCH-2", "model": "OddAModelBX"})
+html = client.get("/assets?q=Odd_Model%25X&show=all").get_data(as_text=True)
+check("Search treats % and _ literally", "q = Odd_Model%X", "only SRCH-1 listed", 'href="/assets/SRCH-1"' in html and 'href="/assets/SRCH-2"' not in html)
+
+d = client.get("/assets/ISO-1/edit").get_data(as_text=True)
+check("Form labels are tied to their inputs", "GET /assets/<id>/edit", "label for= matches an input id",
+      all(f'id="{m}"' in d for m in re.findall(r'<label[^>]* for="([^"]+)"', d)))
+
+import db as _db
+check("Current database passes the startup schema check", "db.schema_problem() on the test database", "None",
+      _db.schema_problem() is None)
+old = Path(tempfile.mkdtemp()) / "old.db"
+oc = sqlite3.connect(old)
+oc.executescript("CREATE TABLE locations(name TEXT, prefix TEXT); CREATE TABLE assets(asset_id TEXT);")
+oc.close()
+keep = _db.DB_PATH
+_db.DB_PATH = old
+problem = _db.schema_problem()
+_db.DB_PATH = keep
+check("An old database is detected at startup", "database without fault_steps", "message pointing to migrate.py",
+      problem is not None and "older" in problem)
 
 # seeding asks before it erases data (the answer is checked by typing YES)
 

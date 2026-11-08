@@ -1,4 +1,4 @@
--- EF101-P11 Hardware Asset Inventory: database schema (SQLite)
+-- EF101-P11 Computer Hardware Inventory and Maintenance System: database schema (SQLite)
 -- locations (1) -- (N) assets (1) -- (N) maintenance
 -- assets (1) -- (N) fault_steps: the work done while a fault is open (one history entry is written when it closes)
 -- The cost of an open fault is ONE number: assets.status_cost (Updated Cost). Steps carry no cost.
@@ -42,7 +42,7 @@ CREATE TABLE assets (
     status_technician TEXT,                             -- technician ('' = not assigned yet)
     status_date       TEXT,                             -- date the fault was recorded (ISO)
     status_cost       REAL CHECK (status_cost IS NULL OR status_cost >= 0), -- updated cost of the open fault
-    active            INTEGER NOT NULL DEFAULT 1,       -- 0 = retired (kept for history)
+    active            INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),  -- 0 = retired (kept for history)
     CHECK ((status = 'Operational' AND status_category IS NULL AND status_detail IS NULL
             AND status_action IS NULL AND status_technician IS NULL AND status_date IS NULL
             AND status_cost IS NULL)

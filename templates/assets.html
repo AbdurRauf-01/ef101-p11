@@ -9,23 +9,23 @@
   <input type="hidden" name="sort" value="{{ sort }}">
   <input type="hidden" name="dir" value="{{ direction }}">
   <input type="hidden" name="first" value="{{ first }}">
-  <div><label>Search (ID, model, CPU, IP)</label><input name="q" value="{{ f.get('q','') }}"></div>
-  <div><label>CPU family</label><select name="cpu_family"><option value="">All</option>
+  <div><label for="f-q">Search (ID, model, CPU, IP)</label><input name="q" value="{{ f.get('q','') }}" id="f-q"></div>
+  <div><label for="f-cpu_family">CPU family</label><select name="cpu_family" id="f-cpu_family"><option value="">All</option>
     {% for o in opts.cpu_family %}<option {{ 'selected' if f.get('cpu_family')==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>RAM (GB)</label><select name="ram_gb"><option value="">All</option>
+  <div><label for="f-ram_gb">RAM (GB)</label><select name="ram_gb" id="f-ram_gb"><option value="">All</option>
     {% for o in opts.ram_gb %}<option value="{{ o }}" {{ 'selected' if f.get('ram_gb')==o|string }}>{{ o }} GB</option>{% endfor %}</select></div>
-  <div><label>RAM type</label><select name="ram_type"><option value="">All</option>
+  <div><label for="f-ram_type">RAM type</label><select name="ram_type" id="f-ram_type"><option value="">All</option>
     {% for o in ram_types %}<option {{ 'selected' if f.get('ram_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Storage type</label><select name="storage_type"><option value="">All</option>
+  <div><label for="f-storage_type">Storage type</label><select name="storage_type" id="f-storage_type"><option value="">All</option>
     {% for o in storage_types %}<option {{ 'selected' if f.get('storage_type')==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Location</label><select name="location"><option value="">All</option>
+  <div><label for="f-location">Location</label><select name="location" id="f-location"><option value="">All</option>
     {% for o in opts.location %}<option {{ 'selected' if f.get('location')==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Status</label><select name="status"><option value="">All</option>
+  <div><label for="f-status">Status</label><select name="status" id="f-status"><option value="">All</option>
     {% for o in statuses %}<option {{ 'selected' if f.get('status')==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Warranty</label><select name="warranty"><option value="">All</option>
+  <div><label for="f-warranty">Warranty</label><select name="warranty" id="f-warranty"><option value="">All</option>
     <option {{ 'selected' if f.get('warranty')=='Active' }}>Active</option>
     <option {{ 'selected' if f.get('warranty')=='Expired' }}>Expired</option></select></div>
-  <div><label>Show</label><select name="show">
+  <div><label for="f-show">Show</label><select name="show" id="f-show">
     <option value="">Active only</option>
     <option value="retired" {{ 'selected' if f.get('show')=='retired' }}>Retired only</option>
     <option value="all" {{ 'selected' if f.get('show')=='all' }}>All</option></select></div>

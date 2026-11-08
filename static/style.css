@@ -4,7 +4,6 @@
    ============================================================ */
 
 /* ── 1. Design Tokens ───────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
   /* Layout */
@@ -509,7 +508,7 @@ form.filters > div { min-width: 140px; flex: 1; }
 .b-Operational, .b-Active   { background: var(--ok-bg);   color: var(--ok);   }
 .b-Faulty, .b-Expired       { background: var(--bad-bg);  color: var(--bad);  }
 .b-Under-Repair,
-.b-Expiring-soon            { background: var(--warn-bg); color: var(--warn); }
+.b-Expiring-soon, .b-Unknown { background: var(--warn-bg); color: var(--warn); }
 .b-Retired                  { background: var(--gray-bg); color: var(--muted);}
 
 /* ── 15. Flash Messages ─────────────────────────────────────── */

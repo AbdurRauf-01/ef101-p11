@@ -138,15 +138,15 @@
 <div class="card" id="log-card"><h2>Log a fault / maintenance event</h2>
 <form method="post" action="{{ url_for('maintenance_add', asset_id=a.asset_id) }}" novalidate>
 <div class="formgrid">
-  <div><label>Date *</label><input type="date" name="event_date" value="{{ today }}"></div>
-  <div><label id="lbl-cat">Fault category</label><select name="fault_category"><option value="">— choose —</option>
+  <div><label for="f-event_date">Date *</label><input type="date" name="event_date" value="{{ today }}" id="f-event_date"></div>
+  <div><label id="lbl-cat" for="f-fault_category">Fault category</label><select name="fault_category" id="f-fault_category"><option value="">— choose —</option>
     {% for o in fault_categories %}<option{{ ' selected' if pref and pref.status_category==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label id="lbl-desc">Fault description</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}"></div>
-  <div><label id="lbl-act">Action taken</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}"></div>
-  <div><label id="lbl-tech">Technician</label><input name="technician" value="{{ pref.status_technician if pref else '' }}"></div>
-  <div><label>Updated Cost ($)</label>
-    <input type="number" step="any" min="0" name="cost" value="{{ ((a.status_cost if a.status_cost is not none else open_total) or 0) }}" placeholder="0"></div>
-  <div><label>Update asset status to *</label><select name="set_status" id="ev-status">
+  <div><label id="lbl-desc" for="f-fault_description">Fault description</label><input name="fault_description" value="{{ pref.status_detail if pref else '' }}" id="f-fault_description"></div>
+  <div><label id="lbl-act" for="f-action_taken">Action taken</label><input name="action_taken" value="{{ pref.status_action if pref else '' }}" id="f-action_taken"></div>
+  <div><label id="lbl-tech" for="f-technician">Technician</label><input name="technician" value="{{ pref.status_technician if pref else '' }}" id="f-technician"></div>
+  <div><label for="f-cost">Updated Cost ($)</label>
+    <input type="number" step="any" min="0" name="cost" value="{{ ((a.status_cost if a.status_cost is not none else open_total) or 0) }}" placeholder="0" id="f-cost"></div>
+  <div><label for="ev-status">Update asset status to *</label><select name="set_status" id="ev-status">
     <option value="">— choose —</option>
     <option>Operational</option><option>Faulty</option><option>Under Repair</option></select></div>
 </div>

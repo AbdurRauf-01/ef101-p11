@@ -85,7 +85,8 @@ install_python_macos() {
         "$brew" install python && return 0
         say "Homebrew install failed; trying the python.org installer instead."
     fi
-    local pkg="/tmp/python-${PYTHON_ORG_VERSION}-macos11.pkg"
+    local pkg
+    pkg="$(mktemp -d)/python-${PYTHON_ORG_VERSION}-macos11.pkg" || return 1
     local url="https://www.python.org/ftp/python/${PYTHON_ORG_VERSION}/python-${PYTHON_ORG_VERSION}-macos11.pkg"
     say "Downloading Python ${PYTHON_ORG_VERSION} from python.org ..."
     curl -fL --proto '=https' --tlsv1.2 -o "$pkg" "$url" || return 1

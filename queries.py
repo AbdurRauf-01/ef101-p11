@@ -6,11 +6,28 @@ import re
 
 from db import get_db
 
+
+def _all(sql, params=()):
+    """Run a read query on its own connection, return every row, and close the connection."""
+    db = get_db()
+    try:
+        return db.execute(sql, params).fetchall()
+    finally:
+        db.close()
+
+
+def _one(sql, params=()):
+    """Run a read query on its own connection, return the first row (or None), and close the connection."""
+    db = get_db()
+    try:
+        return db.execute(sql, params).fetchone()
+    finally:
+        db.close()
+
 # ---- Drop-down lists. app.py validates against these.
 BASE_FAULTS = ["Disk failure", "Overheating", "Network issue", "RAM fault",
                "OS corruption", "Display issue", "PSU failure"]
 FAULT_CATEGORIES = BASE_FAULTS + ["Other", "Unknown"]                    # maintenance event category
-CURRENT_ERROR_CATEGORIES = BASE_FAULTS + ["N/A", "Unknown", "Other"]     # Faulty / Under Repair category
 RAM_TYPES = ["DDR1", "DDR2", "DDR3", "DDR4", "DDR5"]
 
 # ---- Current error: required for these statuses. Operational = N/A (stored as NULL).
@@ -59,22 +76,22 @@ def attention_sql():
 
 # ---- Locations ----------------------------------------------------------------
 def location_names():
-    return [r[0] for r in get_db().execute("SELECT name FROM locations ORDER BY name")]
+    return [r[0] for r in _all("SELECT name FROM locations ORDER BY name")]
 
 
 def find_location(name):
     """The existing location with this name (upper/lower case ignored), or None."""
-    r = get_db().execute("SELECT name FROM locations WHERE LOWER(name)=LOWER(?)", (name,)).fetchone()
+    r = _one("SELECT name FROM locations WHERE LOWER(name)=LOWER(?)", (name,))
     return r[0] if r else None
 
 
 def location_prefix(name):
-    r = get_db().execute("SELECT prefix FROM locations WHERE name=?", (name,)).fetchone()
+    r = _one("SELECT prefix FROM locations WHERE name=?", (name,))
     return r[0] if r else None
 
 
 def all_prefixes():
-    return {r[0] for r in get_db().execute("SELECT prefix FROM locations")}
+    return {r[0] for r in _all("SELECT prefix FROM locations")}
 
 
 def suggest_prefix(name, taken):
@@ -109,20 +126,25 @@ def next_asset_id(prefix):
     """Next free ID for a prefix, e.g. LIB-PC-038. Retired IDs are never reused."""
     stem = f"{prefix}-PC-"
     nums = []
-    for (aid,) in get_db().execute("SELECT asset_id FROM assets WHERE asset_id LIKE ?", (stem + "%",)):
+    for (aid,) in _all("SELECT asset_id FROM assets WHERE asset_id LIKE ? ESCAPE '\\'", (_like_escape(stem) + "%",)):
         tail = aid[len(stem):]
-        if tail.isdigit():
+        if tail.isascii() and tail.isdigit():
             nums.append(int(tail))
     return f"{stem}{(max(nums) if nums else 0) + 1:03d}"
 
 
 # ---- Assets: read -----------------------------------------------------------
 def asset_exists(asset_id):
-    return get_db().execute("SELECT 1 FROM assets WHERE asset_id=?", (asset_id,)).fetchone() is not None
+    return _one("SELECT 1 FROM assets WHERE asset_id=? COLLATE NOCASE", (asset_id,)) is not None
 
 
 def get_asset(asset_id):
-    return get_db().execute("SELECT * FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
+    return _one("SELECT * FROM assets WHERE asset_id=?", (asset_id,))
+
+
+def _like_escape(text):
+    """Make % _ and \\ in user text match literally inside a LIKE pattern (used with ESCAPE '\\')."""
+    return str(text).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def filtered_assets(args):
@@ -135,17 +157,18 @@ def filtered_assets(args):
     elif args.get("show") != "all":
         q += " AND a.active=1"
     if args.get("q"):
-        q += " AND (a.asset_id LIKE ? OR a.model LIKE ? OR a.manufacturer LIKE ? OR a.cpu LIKE ? OR a.ip_address LIKE ?)"
-        p += [f"%{args['q']}%"] * 5
+        q += (" AND (a.asset_id LIKE ? ESCAPE '\\' OR a.model LIKE ? ESCAPE '\\' OR a.manufacturer LIKE ? ESCAPE '\\'"
+              " OR a.cpu LIKE ? ESCAPE '\\' OR a.ip_address LIKE ? ESCAPE '\\')")
+        p += [f"%{_like_escape(args['q'])}%"] * 5
     for key in ["cpu_family", "ram_gb", "ram_type", "storage_type", "location", "status"]:
         if args.get(key):
             q += f" AND a.{key}=?"
             p.append(args[key])
     w = args.get("warranty")
     if w == "Expired":
-        q += " AND a.warranty_expiry < date('now')"
+        q += " AND a.warranty_expiry < date('now','localtime')"
     elif w == "Active":
-        q += " AND a.warranty_expiry >= date('now')"
+        q += " AND a.warranty_expiry >= date('now','localtime')"
     if args.get("sort") == "status":
         first = args.get("first") if args.get("first") in ("Operational", "Under Repair", "Faulty") else "Operational"
         q += " ORDER BY (CASE WHEN a.status=? THEN 0 ELSE 1 END), a.status, a.asset_id"
@@ -154,15 +177,14 @@ def filtered_assets(args):
         col = SORT_COLUMNS.get(args.get("sort"), SORT_COLUMNS["asset_id"])
         direction = "DESC" if args.get("dir") == "desc" else "ASC"
         q += f" ORDER BY {col} {direction}, a.asset_id"   # column and direction come from fixed lists
-    return get_db().execute(q, p).fetchall()
+    return _all(q, p)
 
 
 def filter_options():
     """Values used to fill the filter drop-downs."""
-    db = get_db()
     return {
-        "cpu_family": [r[0] for r in db.execute("SELECT DISTINCT cpu_family FROM assets ORDER BY 1")],
-        "ram_gb": [r[0] for r in db.execute("SELECT DISTINCT ram_gb FROM assets ORDER BY 1")],
+        "cpu_family": [r[0] for r in _all("SELECT DISTINCT cpu_family FROM assets ORDER BY 1")],
+        "ram_gb": [r[0] for r in _all("SELECT DISTINCT ram_gb FROM assets ORDER BY 1")],
         "location": location_names(),
     }
 
@@ -201,12 +223,12 @@ def _close_fault(db, asset_id, ev):
 
 def open_fault_cost(asset_id):
     """Cost of the open fault of this PC: its single Updated Cost."""
-    row = get_db().execute("SELECT status_cost FROM assets WHERE asset_id=?", (asset_id,)).fetchone()
+    row = _one("SELECT status_cost FROM assets WHERE asset_id=?", (asset_id,))
     return float(row["status_cost"]) if row and row["status_cost"] is not None else 0.0
 
 
 def get_steps(asset_id):
-    return get_db().execute("SELECT * FROM fault_steps WHERE asset_id=? ORDER BY id", (asset_id,)).fetchall()
+    return _all("SELECT * FROM fault_steps WHERE asset_id=? ORDER BY id", (asset_id,))
 
 
 def insert_asset(c, step=None):
@@ -265,8 +287,7 @@ def set_active(asset_id, active):
 
 # ---- Maintenance ------------------------------------------------------------
 def get_events(asset_id):
-    return get_db().execute("SELECT * FROM maintenance WHERE asset_id=? ORDER BY event_date DESC, id DESC",
-                            (asset_id,)).fetchall()
+    return _all("SELECT * FROM maintenance WHERE asset_id=? ORDER BY event_date DESC, id DESC", (asset_id,))
 
 
 def log_event(asset_id, f, cost, new_status, current=None):
@@ -303,12 +324,12 @@ def log_event(asset_id, f, cost, new_status, current=None):
 
 
 def all_events():
-    return get_db().execute("SELECT * FROM maintenance ORDER BY event_date DESC, id DESC").fetchall()
+    return _all("SELECT * FROM maintenance ORDER BY event_date DESC, id DESC")
 
 
 def get_maintenance_event(event_id):
     """Retrieve a single maintenance event by its ID."""
-    return get_db().execute("SELECT * FROM maintenance WHERE id=?", (event_id,)).fetchone()
+    return _one("SELECT * FROM maintenance WHERE id=?", (event_id,))
 
 
 def update_maintenance_event(event_id, event_date, fault_category, fault_description, action_taken, technician, cost_usd):
@@ -342,7 +363,7 @@ def delete_maintenance_event(event_id):
 
 def get_step(step_id):
     """Retrieve a single fault step by ID."""
-    return get_db().execute("SELECT * FROM fault_steps WHERE id=?", (step_id,)).fetchone()
+    return _one("SELECT * FROM fault_steps WHERE id=?", (step_id,))
 
 
 def update_step(step_id, step_date, action, technician):
@@ -407,12 +428,12 @@ def fault_history(limit=None, sort="date", direction="desc", first=None):
     if limit is not None:
         sql += " LIMIT ?"
         params.append(int(limit))
-    return get_db().execute(sql, params).fetchall()
+    return _all(sql, params)
 
 
 # ---- Dashboard --------------------------------------------------------------
 def _pairs(sql):
-    return [(r[0], r[1]) for r in get_db().execute(sql).fetchall()]
+    return [(r[0], r[1]) for r in _all(sql)]
 
 
 def _bars(pairs):
@@ -425,8 +446,7 @@ def _bars(pairs):
 def dashboard_data():
     """Everything the dashboard shows, all computed from the same tables with SQL.
     Charts count ACTIVE assets, so they always add up to stats['total']."""
-    db = get_db()
-    one = lambda sql: db.execute(sql).fetchone()[0]
+    one = lambda sql: _one(sql)[0]
     stats = {
         "total": one("SELECT COUNT(*) FROM assets WHERE active=1"),
         "operational": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Operational'"),
@@ -435,14 +455,14 @@ def dashboard_data():
         "faulty": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Faulty'"),
         "repair": one("SELECT COUNT(*) FROM assets WHERE active=1 AND status='Under Repair'"),
         "events": one("SELECT COUNT(*) FROM maintenance"),
-        "out_of_warranty": one("SELECT COUNT(*) FROM assets WHERE active=1 AND warranty_expiry < date('now')"),
+        "out_of_warranty": one("SELECT COUNT(*) FROM assets WHERE active=1 AND warranty_expiry < date('now','localtime')"),
         "total_cost": one("SELECT COALESCE(SUM(cost_usd),0) FROM maintenance"),
     }
 
-    in_warranty, out_warranty = db.execute(
-        "SELECT COALESCE(SUM(CASE WHEN warranty_expiry >= date('now') THEN 1 ELSE 0 END),0), "
-        "COALESCE(SUM(CASE WHEN warranty_expiry < date('now') THEN 1 ELSE 0 END),0) "
-        "FROM assets WHERE active=1").fetchone()
+    in_warranty, out_warranty = _one(
+        "SELECT COALESCE(SUM(CASE WHEN warranty_expiry >= date('now','localtime') THEN 1 ELSE 0 END),0), "
+        "COALESCE(SUM(CASE WHEN warranty_expiry < date('now','localtime') THEN 1 ELSE 0 END),0) "
+        "FROM assets WHERE active=1")
 
     charts = {
         "CPU family": _bars(_pairs(
@@ -470,13 +490,12 @@ def dashboard_data():
         counts[label if label in counts else "Other"] += n
     fault_cats = _bars(sorted(counts.items(), key=lambda kv: -kv[1]))
 
-    top_assets = db.execute(
+    top_assets = _all(
         "SELECT m.asset_id, a.model, COUNT(*) AS n, SUM(m.cost_usd) AS cost FROM maintenance m "
-        "JOIN assets a ON a.asset_id=m.asset_id GROUP BY m.asset_id ORDER BY n DESC, cost DESC LIMIT 5"
-    ).fetchall()
-    attention = db.execute(
+        "JOIN assets a ON a.asset_id=m.asset_id GROUP BY m.asset_id ORDER BY n DESC, cost DESC LIMIT 5")
+    attention = _all(
         f"SELECT a.asset_id, a.model, a.location, a.status, a.status_category, a.status_detail "
-        f"FROM assets a WHERE {attention_sql()} ORDER BY a.asset_id").fetchall()
+        f"FROM assets a WHERE {attention_sql()} ORDER BY a.asset_id")
     return {"stats": stats, "charts": charts, "fault_cats": fault_cats,
             "top_assets": top_assets, "attention": attention}
 
@@ -484,17 +503,17 @@ def dashboard_data():
 # ---- IP addresses -------------------------------------------------------------
 def location_subnet(name):
     """x of this place's range 192.168.x.n, or None for an unknown place."""
-    r = get_db().execute("SELECT ip_subnet FROM locations WHERE name=?", (name,)).fetchone()
+    r = _one("SELECT ip_subnet FROM locations WHERE name=?", (name,))
     return r[0] if r else None
 
 
 def next_subnet():
     """Range number for the next new place: one more than the highest in use."""
-    return get_db().execute("SELECT COALESCE(MAX(ip_subnet),0)+1 FROM locations").fetchone()[0]
+    return _one("SELECT COALESCE(MAX(ip_subnet),0)+1 FROM locations")[0]
 
 
 def ip_owner(location, ip, exclude_id=""):
     """The PC that already has this IP in this place, or None."""
-    r = get_db().execute("SELECT asset_id FROM assets WHERE location=? AND ip_address=? AND asset_id<>?",
-                         (location, ip, exclude_id or "")).fetchone()
+    r = _one("SELECT asset_id FROM assets WHERE location=? AND ip_address=? AND asset_id<>?",
+             (location, ip, exclude_id or ""))
     return r[0] if r else None
