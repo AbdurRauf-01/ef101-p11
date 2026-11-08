@@ -2,7 +2,7 @@
 
 ## v18 (8 Nov 2026)
 
-Review and hardening release. No change to the data model's meaning; the shipped `inventory.db` has the same data. Tests: 228 of 228 pass.
+Review and hardening release. No change to the data model's meaning; the shipped `inventory.db` has the same data. Tests: 229 of 229 pass.
 
 ### Fixed
 - Dates typed in other formats (for example 10/01/2025) are now saved as ISO `YYYY-MM-DD`, so the warranty-after-purchase rule always compares correctly.
@@ -41,11 +41,12 @@ Review and hardening release. No change to the data model's meaning; the shipped
 - The GPU memory (VRAM) field is built without inserting raw HTML.
 
 ### Tests
-- About 36 new checks (228 in total) for the items above, including a live-server and browser run with no console errors and no outside requests.
+- About 37 new checks (229 in total) for the items above, including a live-server and browser run with no console errors and no outside requests.
 
 ### Documentation
 - GitHub link updated to `https://github.com/AbdurRauf-01/ef101-p11` in the app and About pages.
-- README and TEAM_SPLIT corrected: test counts, four tables, 13 templates, validation and security notes, Fault History description, launcher notes.
+- README and TEAM_SPLIT corrected: test counts, four tables, 14 templates, validation and security notes, Fault History description, launcher notes.
 - Schema diagram (`docs/project-schema.svg` and `.png`) no longer shows a test count.
 - Report updated to version 18.
 - Project title now matches the handbook ("Computer Hardware Inventory and Maintenance System") in the README, `schema.sql` heading, schema diagram and report.
+- Validation messages now use readable field names ("CPU is required.", "Operating system is required.", "Storage (GB) must be...") instead of "Cpu", "Os" and "STORAGE GB". One more test (229 in total).

@@ -305,6 +305,10 @@ def first_step(box, was_open, prev_action):
             "technician": box["status_technician"]}
 
 
+FIELD_LABELS = {"manufacturer": "Manufacturer", "model": "Model", "cpu": "CPU", "cpu_family": "CPU family",
+                "os": "Operating system", "location": "Location", "ram_gb": "RAM (GB)", "storage_gb": "Storage (GB)"}
+
+
 def validate_asset(f, is_new, subnet, prev=None):
     """Server-side validation. Returns (clean_dict, errors_list).
     subnet is not used here (IP addresses are never assigned automatically); it is only passed along for new places.
@@ -313,7 +317,7 @@ def validate_asset(f, is_new, subnet, prev=None):
     c = {k: (f.get(k) or "").strip() for k in FIELDS}
     for k in ["manufacturer", "model", "cpu", "cpu_family", "os", "location"]:
         if not c[k]:
-            errors.append(f"{k.replace('_', ' ').title()} is required.")
+            errors.append(f"{FIELD_LABELS[k]} is required.")
     if not c["asset_id"]:
         errors.append("Choose a location so the asset ID can be assigned automatically, or type an ID.")
     elif is_new and not ASSET_ID_RE.match(c["asset_id"]):
@@ -324,7 +328,7 @@ def validate_asset(f, is_new, subnet, prev=None):
             if c[k] <= 0:
                 raise ValueError
         except ValueError:
-            errors.append(f"{k.replace('_', ' ').upper()} must be a positive whole number.")
+            errors.append(f"{FIELD_LABELS[k]} must be a positive whole number.")
     if c["gpu"]:
         try:
             c["gpu_vram_gb"] = int(c["gpu_vram_gb"])

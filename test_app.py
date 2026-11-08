@@ -1059,6 +1059,14 @@ _db.DB_PATH = keep
 check("An old database is detected at startup", "database without fault_steps", "message pointing to migrate.py",
       problem is not None and "older" in problem)
 
+# error messages use readable field names (CPU, Operating system), not code names
+r = client.post("/assets/new", data={**GOOD, "cpu": "", "os": "", "storage_gb": "0", "asset_id": "LBL-1"})
+body = r.get_data(as_text=True)
+check("Validation messages use readable names", "blank CPU and OS, storage 0",
+      "CPU is required / Operating system is required / Storage (GB)",
+      "CPU is required." in body and "Operating system is required." in body
+      and "Storage (GB) must be a positive whole number." in body and "Cpu is" not in body)
+
 # seeding asks before it erases data (the answer is checked by typing YES)
 
 # ---- report ----
