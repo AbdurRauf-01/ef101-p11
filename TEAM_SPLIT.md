@@ -133,7 +133,7 @@ git push
 
 | Dates | Do |
 | --- | --- |
-| Sun 8 Nov | Clone the repository into a fresh folder and run it. Run `python seed.py` and `python test_app.py`. Fill the report TODOs, add screenshots, assemble the final report, push, upload. Laptop ready. |
+| Sun 8 Nov | Fill the report TODOs, add screenshots, assemble the final report, push, upload. Laptop ready. |
 | Mon 9 Nov | Submission. |
 
 \
