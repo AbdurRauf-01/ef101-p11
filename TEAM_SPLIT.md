@@ -111,7 +111,7 @@ Put your real name and ID in the contribution table (section 9 of the report) an
 
 ## Everyone
 
-**GitHub:** Abdur Rauf (EE-26138) creates the repository and adds Irteza Raza (EE-26129) and Hassan Majid (EE-26125) under Settings, Collaborators. Then each member clones it once and pushes only his own files:
+**GitHub:** Abdur Rauf (EE-26138) creates the repository and adds Irteza Raza (EE-26129) and Hassan Majid (EE-26125) under Settings, Collaborators. Then each member does his work and submits the changes to Abdur Rauf. Abdur Rauf clones the repository and commits:
 
 ```
 git clone <repo URL>
@@ -122,9 +122,9 @@ Every time you finish work:
 
 ```
 git pull --rebase
-git add schema.sql db.py queries.py seed.py inventory.db     # Irteza
-git add app.py test_app.py migrate.py scripts README.md CHANGELOG.md   # Abdur
-git add templates static docs                              # Hassan
+git add schema.sql db.py queries.py seed.py inventory.db     # Irteza Raza
+git add app.py test_app.py                                   # Abdur Rauf
+git add templates static                                     # Hassan Majid
 git commit -m "describe what you changed"
 git push
 ```
@@ -136,4 +136,5 @@ git push
 | Sun 8 Nov | Clone the repository into a fresh folder and run it. Run `python seed.py` and `python test_app.py`. Fill the report TODOs, add screenshots, assemble the final report, push, upload. Laptop ready. |
 | Mon 9 Nov | Submission. |
 
+\
 **Be ready for live changes in the viva:** add a record, change a filter, change the needs-attention rule, enter bad data and show the validation.
